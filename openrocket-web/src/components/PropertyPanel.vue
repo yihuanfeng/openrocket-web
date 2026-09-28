@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 属性面板（阶段 2 编辑闭环）：支持数值编辑 + 删除组件
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import type { RocketComponent } from '../lib/types';
 import { MATERIALS, TUBES, SURFACES, nearestTube } from '../lib/materials';
 import { MOTORS } from '../lib/engines';
@@ -12,41 +12,48 @@ const emit = defineEmits<{
 }>();
 
 // 可编辑数值字段（key, 显示名, 单位；finset 参数存 properties，其余为组件字段）
+// —— 组件参数全覆盖：轴向偏移/密度/壁厚/肩部/伞直径与 CD/尾翼倾斜与位置 ——
 const EDITABLE: Record<string, Array<[string, string, string]>> = {
-  nosecone: [['length', '长度', 'm'], ['radius', '半径', 'm']],
-  bodytube: [['length', '长度', 'm'], ['radius', '半径', 'm']],
-  transition: [['length', '长度', 'm'], ['radius', '前端半径', 'm'], ['aftRadius', '后端半径', 'm']],
+  nosecone: [['axialOffset', '轴向偏移', 'm'], ['length', '长度', 'm'], ['radius', '半径', 'm'], ['density', '密度', 'kg/m³'], ['shoulderlength', '肩部长度', 'm'], ['shoulderradius', '肩部半径', 'm']],
+  bodytube: [['axialOffset', '轴向偏移', 'm'], ['length', '长度', 'm'], ['radius', '半径', 'm'], ['density', '密度', 'kg/m³'], ['wallthickness', '壁厚', 'm']],
+  transition: [['axialOffset', '轴向偏移', 'm'], ['length', '长度', 'm'], ['radius', '前端半径', 'm'], ['aftRadius', '后端半径', 'm'], ['density', '密度', 'kg/m³'], ['wallthickness', '壁厚', 'm']],
   trapezoidfinset: [
+    ['offset', '轴向位置', 'm'],
     ['fincount', '翼片数', ''],
     ['rootchord', '根弦', 'm'],
     ['tipchord', '梢弦', 'm'],
     ['sweep', '后掠', 'm'],
     ['height', '高度', 'm'],
     ['thickness', '厚度', 'm'],
+    ['cant', '倾斜角', '°'],
   ],
-  parachute: [['axialOffset', '轴向偏移', 'm']],
-  launchlug: [['axialOffset', '轴向偏移', 'm'], ['length', '长度', 'm'], ['radius', '半径', 'm']],
-  innertube: [['length', '长度', 'm'], ['radius', '半径', 'm']],
+  parachute: [['axialOffset', '轴向偏移', 'm'], ['diameter', '直径', 'm'], ['cd', '阻力系数', '']],
+  launchlug: [['axialOffset', '轴向偏移', 'm'], ['length', '长度', 'm'], ['radius', '半径', 'm'], ['density', '密度', 'kg/m³']],
+  innertube: [['axialOffset', '轴向偏移', 'm'], ['length', '长度', 'm'], ['radius', '半径', 'm'], ['density', '密度', 'kg/m³']],
   ellipticalfinset: [
+    ['offset', '轴向位置', 'm'],
     ['fincount', '翼片数', ''],
     ['rootchord', '根弦', 'm'],
     ['height', '高度', 'm'],
     ['thickness', '厚度', 'm'],
+    ['cant', '倾斜角', '°'],
   ],
   freeformfinset: [
+    ['offset', '轴向位置', 'm'],
     ['fincount', '翼片数', ''],
     ['rootchord', '根弦', 'm'],
     ['tipchord', '梢弦', 'm'],
     ['sweep', '后掠', 'm'],
     ['height', '高度', 'm'],
     ['thickness', '厚度', 'm'],
+    ['cant', '倾斜角', '°'],
   ],
-  tubecoupler: [['length', '长度', 'm'], ['radius', '半径', 'm']],
-  bulkhead: [['length', '厚度', 'm'], ['radius', '半径', 'm']],
-  centeringring: [['length', '厚度', 'm'], ['radius', '半径', 'm']],
-  engineblock: [['length', '长度', 'm'], ['radius', '半径', 'm']],
+  tubecoupler: [['axialOffset', '轴向偏移', 'm'], ['length', '长度', 'm'], ['radius', '半径', 'm'], ['density', '密度', 'kg/m³']],
+  bulkhead: [['axialOffset', '轴向偏移', 'm'], ['length', '厚度', 'm'], ['radius', '半径', 'm'], ['density', '密度', 'kg/m³']],
+  centeringring: [['axialOffset', '轴向偏移', 'm'], ['length', '厚度', 'm'], ['radius', '半径', 'm'], ['density', '密度', 'kg/m³']],
+  engineblock: [['axialOffset', '轴向偏移', 'm'], ['length', '长度', 'm'], ['radius', '半径', 'm'], ['density', '密度', 'kg/m³']],
   masscomponent: [['axialOffset', '轴向偏移', 'm'], ['mass', '质量', 'kg']],
-  streamer: [['axialOffset', '轴向偏移', 'm'], ['length', '长度', 'm']],
+  streamer: [['axialOffset', '轴向偏移', 'm'], ['length', '长度', 'm'], ['width', '宽度', 'm'], ['cd', '阻力系数', '']],
   shockcord: [['axialOffset', '轴向偏移', 'm'], ['cordlength', '绳长', 'm']],
 };
 
@@ -103,7 +110,7 @@ function fieldVal(key: string): string {
 }
 
 function getNum(c: RocketComponent, key: string): number {
-  if (key === 'length' || key === 'radius' || key === 'aftRadius' || key === 'axialOffset') {
+  if (key === 'length' || key === 'radius' || key === 'aftRadius' || key === 'axialOffset' || key === 'density') {
     return (c as unknown as Record<string, number>)[key];
   }
   const raw = c.properties[key];
@@ -113,23 +120,26 @@ function getNum(c: RocketComponent, key: string): number {
 }
 
 function setNum(c: RocketComponent, key: string, v: number): void {
-  if (key === 'length' || key === 'radius' || key === 'aftRadius' || key === 'axialOffset') {
+  if (key === 'length' || key === 'radius' || key === 'aftRadius' || key === 'axialOffset' || key === 'density') {
     (c as unknown as Record<string, number>)[key] = v;
   } else {
     c.properties[key] = String(v);
   }
 }
 
+const invalidKeys = ref<Set<string>>(new Set());
 function onNumChange(key: string, e: Event): void {
   const c = props.component;
   if (!c) return;
   const input = e.target as HTMLInputElement;
   const v = parseFloat(input.value);
   if (isNaN(v) || v < 0) {
-    // 非法输入：回退显示原值
-    input.value = fieldVal(key);
-    return;
+    invalidKeys.value = new Set(invalidKeys.value).add(key);
+    input.title = '请输入不小于 0 的数值';
+    return; // 保留输入框内容，红框提示
   }
+  const next = new Set(invalidKeys.value); next.delete(key);
+  invalidKeys.value = next;
   setNum(c, key, v);
   emit('changed');
 }
@@ -185,6 +195,7 @@ const readOnlyItems = computed<Array<[string, string]>>(() => {
             <td class="v">
               <input
                 class="num"
+                :class="{ invalid: invalidKeys.has(key) }"
                 type="number"
                 step="any"
                 min="0"
@@ -285,6 +296,7 @@ td { padding: 6px 4px; vertical-align: middle; }
   font-size: 13px; color: var(--text); background: #fff; font-variant-numeric: tabular-nums;
 }
 .num:focus { outline: none; border-color: var(--primary); box-shadow: var(--focus-ring); }
+.num.invalid { border-color: var(--red); box-shadow: 0 0 0 2px rgba(255, 59, 48, 0.18); }
 .sel { padding: 4px 6px; border: 1px solid var(--border); border-radius: var(--r-sm); font-size: 13px; }
 .unit { color: var(--text-3); margin-left: 4px; font-size: 11px; }
 .empty { color: var(--text-3); padding: 14px; text-align: center; background: #fff; border: 1px dashed var(--border); border-radius: 10px; }

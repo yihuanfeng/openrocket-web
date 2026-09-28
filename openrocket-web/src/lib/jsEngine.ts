@@ -97,7 +97,7 @@ function buildStageGeos(stage: RocketComponent): Geo[] {
       if (kind === 'nosecone') { r1 = Math.max(r0, r1); r0 = 0; }
       let density = num((c as { density?: number }).density, 0);
       if (density <= 0) density = materialDensity(propsOf(c)['material']) ?? DEFAULT_DENSITY[kind] ?? 855;
-      let thickness = num(propsOf(c)['thickness'], 0);
+      let thickness = num(propsOf(c)['wallthickness'], 0) || num(propsOf(c)['thickness'], 0);
       if (thickness <= 0) thickness = DEFAULT_THICKNESS[kind] ?? 0.001;
       geos.push({ off, len, r0, r1, kind, c, density, thickness });
       cursor = off + len;
@@ -511,9 +511,19 @@ function simCdA(model: RocketModel): number {
     }
     for (const ch of c.children ?? []) walk(ch);
   };
-  walk(model.root);
+  let chuteCdA = 0;
+  const chuteWalk = (c: RocketComponent) => {
+    if (c.type === 'parachute' || c.type === 'streamer') {
+      const d = parseFloat(c.properties['diameter'] ?? '0') || 0;
+      const cd = parseFloat(c.properties['cd'] ?? '0') || 0;
+      if (d > 0 && cd > 0) chuteCdA += (Math.PI * d * d / 4) * cd;
+    }
+    for (const ch of c.children ?? []) chuteWalk(ch);
+  };
+  chuteWalk(model.root);
   // 体阻力（细长体 Cd≈0.45）+ 尾翼摩擦/压差阻力（Cd≈0.02）；表面处理作摩擦系数乘子
-  return (0.45 * Math.PI * rMax * rMax + 0.02 * finA) * surf;
+  // 有伞（设了直径+CD）时以伞阻力为主（开伞后下降段）
+  return Math.max((0.45 * Math.PI * rMax * rMax + 0.02 * finA) * surf, chuteCdA);
 }
 
 function simulate2dof(model: RocketModel, motor: MotorSpec, cond: SimConditions): FlightProfile {

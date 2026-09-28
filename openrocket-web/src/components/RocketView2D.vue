@@ -142,6 +142,7 @@ function onHoverMove(e: MouseEvent, s: Shape): void {
   const maxR = Math.max(s.r0, s.r1);
   if (maxR > 0) parts.push(`径 ${(maxR * 200).toFixed(1)} mm`);
   if (s.kind === 'parachute' && s.comp.properties?.['deployAlt'] !== undefined) parts.push(`开伞 ${s.comp.properties['deployAlt'] === '0' ? '远地点' : s.comp.properties['deployAlt'] + ' m'}`);
+  if ((s.kind === 'parachute' || s.kind === 'streamer') && parseFloat(s.comp.properties?.['diameter'] ?? '0') > 0) parts.push(`伞径 ${(parseFloat(s.comp.properties['diameter'] ?? '0') * 1000).toFixed(0)} mm`);
   if (s.kind === 'innertube' && s.comp.properties?.['motorId']) parts.push(`电机 ${s.comp.properties['motorId']}`);
   hoverTip.value = { x: e.clientX - r.left, y: e.clientY - r.top, text: parts.join(' · ') };
 }
