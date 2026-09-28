@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>poc</groupId>
+  <artifactId>openrocket-wasm-poc</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+  <packaging>jar</packaging>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.source>17</maven.compiler.source>
+    <maven.compiler.target>17</maven.compiler.target>
+    <teavm.version>0.15.0</teavm.version>
+  </properties>
+
+  <dependencies>
+    <!-- 编译期 stub（AWT 几何、slf4j、UUID）：置于 classpath 首位以覆盖 JDK/classlib 缺失 -->
+    <dependency>
+      <groupId>poc</groupId>
+      <artifactId>stubs</artifactId>
+      <version>1.0.0</version>
+      <scope>system</scope>
+      <systemPath>${project.basedir}/stubs.jar</systemPath>
+    </dependency>
+    <dependency>
+      <groupId>info.openrocket</groupId>
+      <artifactId>core</artifactId>
+      <version>1.0.0-SNAPSHOT</version>
+      <scope>system</scope>
+      <systemPath>${project.basedir}/../openrocket/core/build/libs/core-26.xx-SNAPSHOT.jar</systemPath>
+    </dependency>
+    <!-- core 的运行时依赖（system scope 不传递，需显式声明） -->
+    <dependency>
+      <groupId>com.google.inject</groupId>
+      <artifactId>guice</artifactId>
+      <version>7.0.0</version>
+    </dependency>
+    <!-- TeaVM 类库模拟器：提供 java.* 模拟类与 WASM GC runtime 类（org.teavm.runtime.*），仅编译期需要 -->
+    <dependency>
+      <groupId>org.teavm</groupId>
+      <artifactId>teavm-classlib</artifactId>
+      <version>${teavm.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <!-- TeaVM interop：@JSExport 注解（WASM 导出入口） -->
+    <dependency>
+      <groupId>org.teavm</groupId>
+      <artifactId>teavm-interop</artifactId>
+      <version>${teavm.version}</version>
+      <scope>compile</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.13.0</version>
+      </plugin>
+      <plugin>
+        <groupId>org.teavm</groupId>
+        <artifactId>teavm-maven-plugin</artifactId>
+        <version>${teavm.version}</version>
+        <executions>
+          <execution>
+            <id>wasm-compile</id>
+            <goals>
+              <goal>compile</goal>
+            </goals>
+            <phase>compile</phase>
+            <configuration>
+              <targetDirectory>${project.build.directory}/generated/wasm/teavm</targetDirectory>
+              <targetType>WEBASSEMBLY_GC</targetType>
+              <mainClass>poc.SimEntry</mainClass>
+              <minifying>false</minifying>
+              <optimizationLevel>ADVANCED</optimizationLevel>
+              <debugInformationGenerated>true</debugInformationGenerated>
+              <sourceMapsGenerated>true</sourceMapsGenerated>
+              <sourceFilesCopied>true</sourceFilesCopied>
+            </configuration>
+          </execution>
+          <execution>
+            <id>wasm-copy-runtime</id>
+            <goals>
+              <goal>copy-webassembly-gc-runtime</goal>
+            </goals>
+            <phase>compile</phase>
+            <configuration>
+              <targetDirectory>${project.build.directory}/generated/wasm/teavm</targetDirectory>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+  <repositories>
+    <repository>
+      <id>mavenCentral</id>
+      <url>https://repo.maven.apache.org/maven2</url>
+    </repository>
+  </repositories>
+</project>

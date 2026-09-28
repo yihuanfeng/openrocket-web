@@ -1,0 +1,221 @@
+/* ═══════════════════════════════════════════════════════════
+   OpenRocket Web — 设计系统（Apple HIG × Figma 标准）
+   —— token：颜色 / 间距 4pt 网格 / 字号阶梯 / 圆角 / 阴影 / 焦点环
+   ═══════════════════════════════════════════════════════════ */
+:root {
+  /* —— 色板：Apple 系统蓝为主，高饱和科技感 —— */
+  --blue-50: #eef6ff;
+  --blue-100: #d9ecff;
+  --blue-200: #b6d9ff;
+  --blue-300: #7db9ff;
+  --blue-400: #3395ff;
+  --blue-500: #0a84ff;          /* Apple 系统蓝（主色） */
+  --blue-600: #0071e3;          /* hover / 强调 */
+  --blue-700: #005bb5;          /* active / 按压 */
+  --blue-800: #0a3c78;
+  --blue-900: #0a1f44;
+
+  --indigo: #5856d6;
+  --green: #34c759;
+  --green-soft: #d9f2e1;
+  --orange: #ff9f0a;
+  --orange-soft: #ffe9c7;
+  --red: #ff3b30;
+  --red-soft: #ffd9d6;
+
+  --gray-50: #f6f7f9;
+  --gray-100: #eef0f3;
+  --gray-200: #e1e4ea;
+  --gray-300: #cdd2da;
+  --gray-400: #a8aeb8;
+  --gray-500: #8a919c;
+  --gray-600: #5f6670;
+  --gray-700: #3f4652;
+  --gray-900: #181b21;
+
+  /* —— 语义 token —— */
+  --bg: #e8eef9;                /* 应用背景（带蓝的浅灰） */
+  --bg-deep: #dfe8f7;
+  --panel: #ffffff;
+  --panel-2: #f8fafd;
+  --border: var(--gray-200);
+  --border-strong: var(--gray-300);
+
+  --text: var(--gray-900);
+  --text-2: var(--gray-600);
+  --text-3: var(--gray-500);
+  --text-inverse: #ffffff;
+
+  --primary: var(--blue-500);
+  --primary-strong: var(--blue-600);
+  --primary-deep: var(--blue-700);
+  --primary-soft: var(--blue-50);
+  --primary-glow: rgba(10, 132, 255, 0.28);
+  --ok: var(--green);
+  --warn: var(--orange);
+  --danger: var(--red);
+
+  /* 顶栏：深蓝渐变 + 毛玻璃叠加 */
+  --topbar-grad: linear-gradient(135deg, #081a3d 0%, #0a2d6b 48%, #0b4bb5 100%);
+  --topbar-blur: saturate(180%) blur(20px);
+
+  /* —— 间距：4pt 网格 —— */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+
+  /* —— 字号阶梯（SF Pro / PingFang 系统字体） —— */
+  --fs-caption: 11px;
+  --fs-body: 13px;
+  --fs-callout: 15px;
+  --fs-title3: 17px;
+  --fs-title2: 20px;
+
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  /* —— 圆角 —— */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+  --r-full: 999px;
+
+  /* —— 阴影（Apple 层次） —— */
+  --sh-sm: 0 1px 2px rgba(10, 40, 80, 0.05), 0 1px 3px rgba(10, 40, 80, 0.07);
+  --sh-sm-hover: 0 4px 14px rgba(10, 40, 80, 0.10), 0 2px 4px rgba(10, 40, 80, 0.06);
+  --sh-md: 0 4px 12px rgba(16, 24, 40, 0.08), 0 2px 4px rgba(16, 24, 40, 0.05);
+  --sh-lg: 0 12px 32px rgba(8, 26, 61, 0.16), 0 4px 12px rgba(8, 26, 61, 0.08);
+  --sh-glow: 0 2px 12px var(--primary-glow);
+
+  /* 焦点环（可访问性） */
+  --focus-ring: 0 0 0 3px rgba(10, 132, 255, 0.28);
+
+  --sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display',
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+  --mono: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, monospace;
+
+  font: 14px/1.5 var(--sans);
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-variant-numeric: tabular-nums;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0; padding: 0; width: 100%; height: 100%;
+}
+
+#app {
+  width: 100%; height: 100%; min-height: 100svh; margin: 0; padding: 0;
+}
+
+button, input, select, textarea { font-family: inherit; }
+
+/* —— 基础控件规范（Figma 组件基类） —— */
+
+/* 按钮 */
+.btn {
+  font: inherit; font-size: var(--fs-body); font-weight: var(--fw-medium);
+  padding: 6px 14px; border-radius: var(--r-md); cursor: pointer; user-select: none;
+  border: 1px solid transparent; line-height: 1.35;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.05s ease;
+}
+.btn:active:not(:disabled) { transform: scale(0.98); }
+.btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.btn:disabled { opacity: 0.4; cursor: default; }
+
+/* 主按钮 */
+.btn.primary {
+  background: linear-gradient(180deg, var(--blue-400) 0%, var(--blue-500) 55%, var(--blue-600) 100%);
+  color: #fff; font-weight: var(--fw-semibold);
+  box-shadow: 0 1px 2px rgba(10, 132, 255, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+.btn.primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, var(--blue-400) 0%, var(--blue-500) 45%, var(--blue-600) 100%);
+  box-shadow: 0 2px 8px rgba(10, 132, 255, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+/* 次级 / 幽灵按钮 */
+.btn.ghost {
+  background: var(--panel-2); color: var(--text); border-color: var(--border);
+}
+.btn.ghost:hover:not(:disabled) { background: var(--gray-100); border-color: var(--gray-300); }
+
+/* 浅色按钮（用于深色顶栏） */
+.btn.onDark {
+  background: transparent; color: rgba(255, 255, 255, 0.9);
+  border-color: transparent;
+  border-radius: var(--r-sm);
+}
+.btn.onDark:hover:not(:disabled) { background: rgba(255, 255, 255, 0.13); color: #fff; }
+.btn.onDark.sm { padding: 4px 10px; font-size: var(--fs-body); line-height: 1.2; }
+
+/* 输入 / 选择器 */
+.field, select.field, input.field {
+  font: inherit; font-size: var(--fs-body); color: var(--text);
+  background: #fff; border: 1px solid var(--border-strong); border-radius: var(--r-md);
+  padding: 6px 10px; outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.field:focus, select.field:focus, input.field:focus {
+  border-color: var(--blue-500); box-shadow: var(--focus-ring);
+}
+select.field { cursor: pointer; }
+select.field:disabled, input.field:disabled { opacity: 0.5; cursor: default; }
+
+/* 卡片 */
+.card {
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-lg);
+  box-shadow: var(--sh-sm);
+}
+.card-title {
+  font-size: var(--fs-callout); font-weight: var(--fw-semibold); color: var(--text);
+  display: flex; align-items: center; gap: var(--sp-2);
+}
+
+/* 标签 */
+.tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: var(--fs-caption); line-height: 1;
+  padding: 3px 10px; border-radius: var(--r-full);
+  background: var(--gray-100); color: var(--gray-600);
+  border: 1px solid var(--gray-200); white-space: nowrap;
+}
+.tag.blue { background: var(--blue-50); color: var(--blue-700); border-color: var(--blue-200); }
+.tag.green { background: var(--green-soft); color: #1a7f37; border-color: #b7e4c6; }
+.tag.red { background: var(--red-soft); color: #c0261e; border-color: #f5b8b4; }
+.tag.orange { background: var(--orange-soft); color: #b45309; border-color: #f4d0a0; }
+
+/* 分段控件（Segmented Control，Apple 风格） */
+.seg { display: inline-flex; padding: 2px; background: var(--gray-100); border-radius: var(--r-md); border: 1px solid var(--border); }
+.seg button {
+  font: inherit; font-size: var(--fs-body); font-weight: var(--fw-medium);
+  color: var(--text-2); padding: 3px 12px; border: none; border-radius: 8px;
+  background: transparent; cursor: pointer; transition: all 0.15s ease;
+}
+.seg button.on {
+  background: #fff; color: var(--text); font-weight: var(--fw-semibold);
+  box-shadow: var(--sh-sm);
+}
+
+/* 滚动条 */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb {
+  background: var(--gray-300); border-radius: var(--r-full);
+  border: 2px solid transparent; background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--gray-400); border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-track { background: transparent; }
+
+::selection { background: rgba(10, 132, 255, 0.22); }

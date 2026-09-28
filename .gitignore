@@ -1,0 +1,17 @@
+# macOS
+.DS_Store
+
+# 依赖与构建产物
+node_modules/
+dist/
+
+# 官方 OpenRocket 源码（独立仓库，本地 Java 方案已弃用）
+openrocket/
+
+# 临时与测试
+*.log
+
+# WASM 实验工具链（本地二进制，非代码）
+tools/
+phase0-poc/target/
+phase0-poc/tmp2/
