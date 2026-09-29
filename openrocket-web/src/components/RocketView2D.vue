@@ -1,9 +1,16 @@
 <script setup lang="ts">
-// 2D 侧视图：竖直显示火箭（鼻锥朝上），沿轴线渲染外形轮廓（米 → SVG 坐标）
+// 2D 侧视图：支持横/竖两种摆放（竖=鼻锥朝上，横=鼻锥朝左），沿轴线渲染外形轮廓
 import { computed, ref } from 'vue';
 import type { RocketComponent } from '../lib/types';
 
-const props = defineProps<{ root: RocketComponent; selected?: RocketComponent | null; unitMode?: 'm' | 'mm' | 'cm'; cgX?: number | null; cpX?: number | null }>();
+const props = defineProps<{
+  root: RocketComponent;
+  selected?: RocketComponent | null;
+  unitMode?: 'm' | 'mm' | 'cm';
+  cgX?: number | null;
+  cpX?: number | null;
+  orientation?: 'vertical' | 'horizontal';
+}>();
 function fmtLen(vm: number): string {
   const u = props.unitMode ?? 'mm';
   const scaled = vm * (u === 'm' ? 1 : u === 'cm' ? 100 : 1000);
@@ -11,9 +18,11 @@ function fmtLen(vm: number): string {
 }
 const emit = defineEmits<{ hover: [c: RocketComponent | null]; pick: [c: RocketComponent]; change: [] }>();
 
+const isH = computed(() => props.orientation === 'horizontal');
+
 interface Shape {
-  z0: number; z1: number;   // 轴向范围（米），0=底部，向上递增，鼻锥在最上
-  r0: number; r1: number;   // 前/后半径（米）——竖直图按 OpenRocket 语义：鼻锥半径=基部
+  z0: number; z1: number;   // 轴向范围（米），0=鼻端，向上递增向尾部
+  r0: number; r1: number;   // 前/后半径（米）
   kind: string;
   name: string;
   comp: RocketComponent;
@@ -27,13 +36,11 @@ function lengthOf(c: RocketComponent): number {
   return isNaN(l) ? 0 : Math.max(0, l);
 }
 
-/** 计算外形链：OpenRocket 轴向语义 —— z=0 在鼻尖（视觉顶部），z 递增向尾部（视觉向下）；
- *  stage 数组顺序 = 鼻端→尾部（第一个 stage 在最上方）；stage 内组件顺序同样为鼻端→尾部。
- *  头锥：尖端在 z0（鼻端），基部在 z1；过渡段：radius=前端（z0），aftRadius=后端（z1）。 */
+/** 计算外形链：OpenRocket 轴向语义 —— z=0 在鼻尖，z 递增向尾部；stage 数组顺序=鼻端→尾部 */
 function buildShapes(root: RocketComponent): Shape[] {
   const shapes: Shape[] = [];
   const stages = root.children.filter((c) => c.type === 'stage');
-  let base = 0; // 鼻端偏移（z=0 起，逐级向尾部推进）
+  let base = 0;
   for (const stage of stages) {
     let cursor = base;
     for (const c of stage.children) {
@@ -51,7 +58,6 @@ function buildShapes(root: RocketComponent): Shape[] {
         comp: c,
       };
       if (c.type === 'nosecone') {
-        // 头锥：尖端在鼻端（z0），基部在后（z1）
         s.r0 = 0;
         s.r1 = radiusAt(c.radius);
       }
@@ -90,51 +96,61 @@ const view = computed(() => {
 });
 
 const W = 600;
-const H = computed(() => Math.max(420, Math.round(view.value.height * 90)));
+/** 竖版：轴向走 y，高度动态；横版：轴向走 x，高度扁一点 */
+const H = computed(() => (isH.value ? Math.max(300, Math.round(view.value.height * 55)) : Math.max(420, Math.round(view.value.height * 90))));
 
-/** 米 → SVG 坐标：z=0 鼻尖在顶部（y 小），z 增大向尾部（y 大/底部）；x 中心线=300 */
-function yAt(z: number): number {
+/** 轴向坐标：竖版 → y（z=0 鼻尖在顶部），横版 → x（z=0 鼻尖在左） */
+function axPos(z: number): number {
   const pad = view.value.pad;
+  if (isH.value) return (pad + z) / view.value.height * W;
   return (pad + z) / view.value.height * H.value;
 }
-function xAt(r: number): number {
-  return W / 2 + (r / Math.max(view.value.maxR * 0.7, 0.001)) * (W * 0.36);
+/** 半径坐标（中心线单侧）：竖版 → x（中心线 W/2 向右），横版 → y（中心线 H/2 向下） */
+function radPos(r: number): number {
+  const s = r / Math.max(view.value.maxR * 0.7, 0.001);
+  if (isH.value) return H.value / 2 + s * (H.value * 0.36);
+  return W / 2 + s * (W * 0.36);
+}
+/** 中心线坐标 */
+function midLine(): number {
+  return isH.value ? H.value / 2 : W / 2;
 }
 
-/** 组件轮廓（右半：中心线到 r） */
+/** 组件轮廓（中心线一侧；另一侧由镜像渲染） */
 function shapePath(s: Shape): string {
-  const y0 = yAt(s.z0), y1 = yAt(s.z1);
-  const r0 = xAt(s.r0) - W / 2, r1 = xAt(s.r1) - W / 2;
+  const a0 = axPos(s.z0), a1 = axPos(s.z1);
+  const mid = midLine();
+  const r0 = radPos(s.r0) - mid, r1 = radPos(s.r1) - mid;
   switch (s.kind) {
     case 'nosecone':
-      // 头锥：尖端在鼻端（z0→y0=顶部），基部在后（z1→y1=下方，r1=基部半径）
-      return `M ${W / 2} ${y0} Q ${W / 2 + r1 * 0.55} ${(y0 + y1) / 2} ${W / 2 + r1} ${y1} L ${W / 2} ${y1} Z`;
+      // 鼻锥：尖端在鼻端（a0），基部在后（a1，r1=基部半径）
+      return `M ${mid} ${a0} Q ${mid + r1 * 0.55} ${(a0 + a1) / 2} ${mid + r1} ${a1} L ${mid} ${a1} Z`;
     case 'transition':
-      return `M ${W / 2} ${y0} L ${W / 2 + r0} ${y0} L ${W / 2 + r1} ${y1} L ${W / 2} ${y1} Z`;
+      return `M ${mid} ${a0} L ${mid + r0} ${a0} L ${mid + r1} ${a1} L ${mid} ${a1} Z`;
     case 'finset':
     case 'fintab':
     case 'trapezoidfinset':
     case 'ellipticalfinset':
-      return finPath(s, y0, y1);
+      return finPath(s, a0, a1);
     case 'launchlug':
     case 'railbutton':
-      return `M ${W / 2 + r0} ${y0} L ${W / 2 + r0} ${y1} L ${W / 2 + r0 * 1.6} ${(y0 + y1) / 2} Z`;
+      return `M ${mid + r0} ${a0} L ${mid + r0} ${a1} L ${mid + r0 * 1.6} ${(a0 + a1) / 2} Z`;
     default:
-      return `M ${W / 2} ${y0} L ${W / 2 + r0} ${y0} L ${W / 2 + r1} ${y1} L ${W / 2} ${y1} Z`;
+      return `M ${mid} ${a0} L ${mid + r0} ${a0} L ${mid + r1} ${a1} L ${mid} ${a1} Z`;
   }
 }
 
 /** 尾翼（一侧三角板） */
-function finPath(s: Shape, y0: number, y1: number): string {
+function finPath(s: Shape, a0: number, a1: number): string {
   const h = parseFloat(s.comp.properties['height'] ?? '') || 0.05;
-  const r0 = xAt(s.r0) - W / 2;
-  const hPx = (h / Math.max(view.value.maxR * 0.7, 0.001)) * (W * 0.36);
-  return `M ${W / 2 + r0} ${y0} L ${W / 2 + r0 + hPx} ${y0} L ${W / 2 + r0 + hPx} ${y1} L ${W / 2 + r0} ${y1} Z`;
+  const r0 = radPos(s.r0) - midLine();
+  const hPx = (h / Math.max(view.value.maxR * 0.7, 0.001)) * (isH.value ? H.value * 0.36 : W * 0.36);
+  return `M ${midLine() + r0} ${a0} L ${midLine() + r0 + hPx} ${a0} L ${midLine() + r0 + hPx} ${a1} L ${midLine() + r0} ${a1} Z`;
 }
 
 const isInner = (s: Shape) => ['innertube', 'enginemount', 'engineblock'].includes(s.kind);
 
-// —— P1-5：视图内悬浮信息（组件名 + 关键尺寸）——
+// —— 悬浮信息 ——
 const hoverTip = ref<{ x: number; y: number; text: string } | null>(null);
 function onHoverMove(e: MouseEvent, s: Shape): void {
   const svg = svgRef.value;
@@ -160,18 +176,18 @@ function getSvg(): string {
 }
 defineExpose({ getSvg });
 
-// —— 拖拽轴向调整（竖直拖动改变轴向位置）——
+// —— 拖拽轴向调整（竖版纵向拖，横版横向拖）——
 const DRAGGABLE = ['nosecone', 'bodytube', 'transition', 'innertube', 'launchlug', 'parachute'];
 function canDrag(s: Shape): boolean {
   return DRAGGABLE.includes(s.kind);
 }
-let drag: { comp: RocketComponent; startY: number; startOff: number } | null = null;
+let drag: { comp: RocketComponent; start: number; startOff: number } | null = null;
 function onShapeDown(e: MouseEvent, s: Shape): void {
   if (!canDrag(s)) return;
   e.preventDefault();
   drag = {
     comp: s.comp,
-    startY: e.clientY,
+    start: isH.value ? e.clientX : e.clientY,
     startOff: isNaN(s.comp.axialOffset) ? 0 : s.comp.axialOffset,
   };
   window.addEventListener('mousemove', onDragMove);
@@ -179,8 +195,9 @@ function onShapeDown(e: MouseEvent, s: Shape): void {
 }
 function onDragMove(e: MouseEvent): void {
   if (!drag) return;
-  const dy = e.clientY - drag.startY;
-  const dz = (dy / H.value) / scale.value * view.value.height; // 鼻尖基准：屏幕 y 向下 = z 向尾部（增大）；除以 scale 还原逻辑坐标
+  const d = isH.value ? e.clientX - drag.start : e.clientY - drag.start;
+  const axisLen = isH.value ? W : H.value;
+  const dz = (d / axisLen) / scale.value * view.value.height;
   drag.comp.axialOffset = Math.max(0, drag.startOff + dz);
 }
 function onDragUp(): void {
@@ -191,13 +208,12 @@ function onDragUp(): void {
   emit('change');
 }
 
-// —— P1：缩放平移（viewBox 动态窗口，SVG 内部坐标不变 → hover/拾取/拖拽自动正确）——
-const scale = ref(1);   // 1=自适应全览
-const vx = ref(0);      // viewBox 左上角（逻辑坐标）
+// —— 缩放平移（viewBox 动态窗口）——
+const scale = ref(1);
+const vx = ref(0);
 const vy = ref(0);
 const MIN_S = 0.4, MAX_S = 8;
 
-/** viewBox 字符串：窗口宽=W/scale、高=H/scale，左上角 (vx, vy) */
 function windowBox(): string {
   return `${vx.value.toFixed(1)} ${vy.value.toFixed(1)} ${(W / scale.value).toFixed(1)} ${(H.value / scale.value).toFixed(1)}`;
 }
@@ -208,15 +224,12 @@ function onWheel(e: WheelEvent): void {
   const svg = svgRef.value;
   if (!svg) return;
   const rect = svg.getBoundingClientRect();
-  // 鼠标在屏幕坐标（0..W, 0..H 逻辑映射）
   const sx = ((e.clientX - rect.left) / rect.width) * W;
   const sy = ((e.clientY - rect.top) / rect.height) * H.value;
-  // 当前鼠标对应的 viewBox 坐标
   const vbx = vx.value + sx / scale.value;
   const vby = vy.value + sy / scale.value;
   const f = e.deltaY < 0 ? 1.15 : 1 / 1.15;
   const ns = Math.min(MAX_S, Math.max(MIN_S, scale.value * f));
-  // 保持鼠标下内容不动
   vx.value = vbx - sx / ns;
   vy.value = vby - sy / ns;
   scale.value = ns;
@@ -239,23 +252,23 @@ function onPanUp(): void {
   window.removeEventListener('mouseup', onPanUp);
 }
 
-// —— P1：轴向测量标尺（SVG 逻辑坐标，随缩放同步）——
-const RULER = 34; // 标尺占用左侧宽度（px）
-function rulerTicks(): { y: number; label: string }[] {
+// —— 轴向测量标尺：竖版左侧竖尺，横版底部横尺 ——
+const RULER = 34;
+function rulerMarks(): { p: number; label: string }[] {
   const h = view.value.height;
   if (h <= 0) return [];
-  // 目标刻度间距 ~38px 逻辑高，反推米数后取 1/2/5×10ⁿ
-  const target = (38 / H.value) * h;
+  const target = (38 / (isH.value ? W : H.value)) * h;
   const mag = Math.pow(10, Math.floor(Math.log10(target)));
   const cands = [mag, 2 * mag, 5 * mag, 10 * mag];
   const step = cands.find((c) => c >= target) ?? cands[cands.length - 1];
-  const out: { y: number; label: string }[] = [];
+  const out: { p: number; label: string }[] = [];
   for (let z = 0; z <= h + 1e-9; z += step) {
-    out.push({ y: yAt(z), label: step >= 1 ? z.toFixed(1) : (z * 100).toFixed(0) });
+    out.push({ p: axPos(z), label: step >= 1 ? z.toFixed(1) : (z * 100).toFixed(0) });
   }
   return out;
 }
 const unitLabel = computed(() => (view.value.height >= 1 ? 'm' : 'cm'));
+const marks = computed(() => rulerMarks());
 </script>
 
 <template>
@@ -284,18 +297,28 @@ const unitLabel = computed(() => (view.value.height >= 1 ? 'm' : 'cm'));
         </linearGradient>
       </defs>
       <rect x="0" y="0" :width="W" :height="H" fill="url(#grid2d)" class="bg-pan" @mousedown.self="onBgDown" />
-      <!-- 轴向测量标尺（左侧） -->
-      <g class="ruler">
-        <line :x1="RULER / 2" :y1="yAt(0)" :x2="RULER / 2" :y2="yAt(view.height)" stroke="rgba(160,205,255,0.5)" stroke-width="1" />
-        <template v-for="t in rulerTicks()" :key="'t' + t.y">
-          <line :x1="RULER / 2 - 5" :x2="RULER / 2" :y1="t.y" :y2="t.y" stroke="rgba(160,205,255,0.5)" stroke-width="1" />
-          <text :x="3" :y="t.y + 3" fill="rgba(180,210,245,0.85)" font-size="9">{{ t.label }}</text>
+      <!-- 轴向测量标尺 -->
+      <g v-if="!isH" class="ruler">
+        <line :x1="RULER / 2" :y1="axPos(0)" :x2="RULER / 2" :y2="axPos(view.height)" stroke="rgba(160,205,255,0.5)" stroke-width="1" />
+        <template v-for="t in marks" :key="'t' + t.p">
+          <line :x1="RULER / 2 - 5" :x2="RULER / 2" :y1="t.p" :y2="t.p" stroke="rgba(160,205,255,0.5)" stroke-width="1" />
+          <text :x="3" :y="t.p + 3" fill="rgba(180,210,245,0.85)" font-size="9">{{ t.label }}</text>
         </template>
-        <text :x="3" :y="yAt(0) - 4" fill="rgba(180,210,245,0.85)" font-size="9" font-weight="700">{{ unitLabel }}</text>
+        <text :x="3" :y="axPos(0) - 4" fill="rgba(180,210,245,0.85)" font-size="9" font-weight="700">{{ unitLabel }}</text>
       </g>
-      <line :x1="W / 2" :y1="8" :x2="W / 2" :y2="H - 24" stroke="rgba(160,205,255,0.45)" stroke-dasharray="6 5" stroke-width="1" />
+      <g v-else class="ruler ruler-h">
+        <line :x1="axPos(0)" :y1="H - RULER / 2" :x2="axPos(view.height)" :y2="H - RULER / 2" stroke="rgba(160,205,255,0.5)" stroke-width="1" />
+        <template v-for="t in marks" :key="'t' + t.p">
+          <line :x1="t.p" :y1="H - RULER / 2 - 5" :x2="t.p" :y2="H - RULER / 2" stroke="rgba(160,205,255,0.5)" stroke-width="1" />
+          <text :x="t.p + 2" :y="H - RULER / 2 + 12" fill="rgba(180,210,245,0.85)" font-size="9" text-anchor="middle">{{ t.label }}</text>
+        </template>
+        <text :x="axPos(view.height) + 4" :y="H - RULER / 2 + 12" fill="rgba(180,210,245,0.85)" font-size="9" font-weight="700">{{ unitLabel }}</text>
+      </g>
+      <!-- 中心线 -->
+      <line v-if="!isH" :x1="W / 2" :y1="8" :x2="W / 2" :y2="H - 24" stroke="rgba(160,205,255,0.45)" stroke-dasharray="6 5" stroke-width="1" />
+      <line v-else :x1="8" :y1="H / 2" :x2="W - RULER - 8" :y2="H / 2" stroke="rgba(160,205,255,0.45)" stroke-dasharray="6 5" stroke-width="1" />
       <g v-for="(s, i) in shapes" :key="i">
-        <!-- 右半 -->
+        <!-- 一侧 -->
         <path
           :d="shapePath(s)"
           :fill="s.kind.includes('fin') ? 'url(#finFill2d)' : isInner(s) ? 'url(#innerFill2d)' : 'url(#bodyFill2d)'"
@@ -307,12 +330,23 @@ const unitLabel = computed(() => (view.value.height >= 1 ? 'm' : 'cm'));
           @mousemove="onHoverMove($event, s)"
           @mouseleave="emit('hover', null); clearHoverTip()"
           @mousedown.prevent="onShapeDown($event, s)"
-          @click="emit('pick', s.comp)" 
+          @click="emit('pick', s.comp)"
         />
-        <!-- 左半镜像 -->
+        <!-- 另一侧镜像：竖版左右镜像，横版上下镜像 -->
         <path
+          v-if="!isH"
           :d="shapePath(s)"
           transform="translate(600, 0) scale(-1, 1)"
+          :fill="s.kind.includes('fin') ? 'url(#finFill2d)' : isInner(s) ? 'url(#innerFill2d)' : 'url(#bodyFill2d)'"
+          :opacity="xray && !isInner(s) ? 0.06 : 0.35"
+          @mouseenter="emit('hover', s.comp)"
+          @mouseleave="emit('hover', null)"
+          @click="emit('pick', s.comp)"
+        />
+        <path
+          v-else
+          :d="shapePath(s)"
+          :transform="'translate(0,' + H + ') scale(1, -1)'"
           :fill="s.kind.includes('fin') ? 'url(#finFill2d)' : isInner(s) ? 'url(#innerFill2d)' : 'url(#bodyFill2d)'"
           :opacity="xray && !isInner(s) ? 0.06 : 0.35"
           @mouseenter="emit('hover', s.comp)"
@@ -322,17 +356,31 @@ const unitLabel = computed(() => (view.value.height >= 1 ? 'm' : 'cm'));
         <title>{{ s.name }}</title>
       </g>
       <!-- CG / CP 位置标记 -->
-      <g v-if="props.cgX !== null && props.cgX !== undefined">
-        <line :x1="W / 2 + 14" :x2="W / 2 + 46" :y1="yAt(props.cgX)" :y2="yAt(props.cgX)" stroke="#34c759" stroke-width="1.6" stroke-dasharray="3 3" />
-        <circle :cx="W / 2 + 50" :cy="yAt(props.cgX)" r="4.5" fill="#34c759" stroke="#fff" stroke-width="1.5" />
-        <text :x="W / 2 + 60" :y="yAt(props.cgX) + 4" fill="#5ee08a" font-size="11" font-weight="700">CG {{ props.cgX.toFixed(3) }} m</text>
-      </g>
-      <g v-if="props.cpX !== null && props.cpX !== undefined">
-        <line :x1="W / 2 - 14" :x2="W / 2 - 46" :y1="yAt(props.cpX)" :y2="yAt(props.cpX)" stroke="#ff3b30" stroke-width="1.6" stroke-dasharray="3 3" />
-        <circle :cx="W / 2 - 50" :cy="yAt(props.cpX)" r="4.5" fill="#ff3b30" stroke="#fff" stroke-width="1.5" />
-        <text :x="W / 2 - 60" :y="yAt(props.cpX) + 4" fill="#ff8f87" font-size="11" font-weight="700" text-anchor="end">CP {{ props.cpX.toFixed(3) }} m</text>
-      </g>
-      <text v-if="view.height > 0.05" :x="W / 2 + 24" :y="H - 10" fill="rgba(190,215,245,0.85)" font-size="10">总长 {{ fmtLen(view ? view.height : 0) }} · 鼻锥朝上 · 滚轮缩放 / 空白拖拽平移（×{{ scale.toFixed(1) }}）</text>
+      <template v-if="!isH">
+        <g v-if="props.cgX !== null && props.cgX !== undefined">
+          <line :x1="W / 2 + 14" :x2="W / 2 + 46" :y1="axPos(props.cgX)" :y2="axPos(props.cgX)" stroke="#34c759" stroke-width="1.6" stroke-dasharray="3 3" />
+          <circle :cx="W / 2 + 50" :cy="axPos(props.cgX)" r="4.5" fill="#34c759" stroke="#fff" stroke-width="1.5" />
+          <text :x="W / 2 + 60" :y="axPos(props.cgX) + 4" fill="#5ee08a" font-size="11" font-weight="700">CG {{ props.cgX.toFixed(3) }} m</text>
+        </g>
+        <g v-if="props.cpX !== null && props.cpX !== undefined">
+          <line :x1="W / 2 - 14" :x2="W / 2 - 46" :y1="axPos(props.cpX)" :y2="axPos(props.cpX)" stroke="#ff3b30" stroke-width="1.6" stroke-dasharray="3 3" />
+          <circle :cx="W / 2 - 50" :cy="axPos(props.cpX)" r="4.5" fill="#ff3b30" stroke="#fff" stroke-width="1.5" />
+          <text :x="W / 2 - 60" :y="axPos(props.cpX) + 4" fill="#ff8f87" font-size="11" font-weight="700" text-anchor="end">CP {{ props.cpX.toFixed(3) }} m</text>
+        </g>
+      </template>
+      <template v-else>
+        <g v-if="props.cgX !== null && props.cgX !== undefined">
+          <line :x1="axPos(props.cgX)" :y1="H / 2 - 14" :x2="axPos(props.cgX)" :y2="H / 2 - 46" stroke="#34c759" stroke-width="1.6" stroke-dasharray="3 3" />
+          <circle :cx="axPos(props.cgX)" :cy="H / 2 - 50" r="4.5" fill="#34c759" stroke="#fff" stroke-width="1.5" />
+          <text :x="axPos(props.cgX) + 6" :y="H / 2 - 56" fill="#5ee08a" font-size="11" font-weight="700">CG {{ props.cgX.toFixed(3) }} m</text>
+        </g>
+        <g v-if="props.cpX !== null && props.cpX !== undefined">
+          <line :x1="axPos(props.cpX)" :y1="H / 2 + 14" :x2="axPos(props.cpX)" :y2="H / 2 + 46" stroke="#ff3b30" stroke-width="1.6" stroke-dasharray="3 3" />
+          <circle :cx="axPos(props.cpX)" :cy="H / 2 + 50" r="4.5" fill="#ff3b30" stroke="#fff" stroke-width="1.5" />
+          <text :x="axPos(props.cpX) + 6" :y="H / 2 + 60" fill="#ff8f87" font-size="11" font-weight="700">CP {{ props.cpX.toFixed(3) }} m</text>
+        </g>
+      </template>
+      <text v-if="view.height > 0.05" :x="isH ? W - RULER - 4 : W / 2 + 24" :y="isH ? H / 2 + 22 : H - 10" fill="rgba(190,215,245,0.85)" font-size="10" :text-anchor="isH ? 'end' : 'start'">总长 {{ fmtLen(view ? view.height : 0) }} · {{ isH ? '鼻锥朝左' : '鼻锥朝上' }} · 滚轮缩放 / 空白拖拽平移（×{{ scale.toFixed(1) }}）</text>
     </svg>
     <div v-if="hoverTip" class="hover-tip2d" :style="{ left: hoverTip.x + 14 + 'px', top: hoverTip.y + 10 + 'px' }">
       {{ hoverTip.text }}
@@ -367,6 +415,7 @@ const unitLabel = computed(() => (view.value.height >= 1 ? 'm' : 'cm'));
 .bg-pan { cursor: grab; }
 .bg-pan:active { cursor: grabbing; }
 .ruler { pointer-events: none; user-select: none; }
+.ruler-h text { pointer-events: none; }
 .xray2d .fit { border-radius: 7px; border-left: 1px solid var(--border-strong); margin-left: 6px; box-shadow: var(--sh-sm); }
 .hover-tip2d {
   position: absolute; z-index: 5; pointer-events: none;

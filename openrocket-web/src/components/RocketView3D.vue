@@ -3,8 +3,9 @@
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import type { RocketComponent } from '../lib/types';
 
-const props = defineProps<{ root: RocketComponent; selected?: RocketComponent | null; cgX?: number | null; cpX?: number | null }>();
+const props = defineProps<{ root: RocketComponent; selected?: RocketComponent | null; cgX?: number | null; cpX?: number | null; orientation?: 'vertical' | 'horizontal' }>();
 const emit = defineEmits<{ hover: [c: RocketComponent | null]; pick: [c: RocketComponent] }>();
+const isH = computed(() => props.orientation === 'horizontal');
 
 interface Seg {
   z0: number; z1: number;
@@ -273,15 +274,21 @@ function draw(): void {
 
   const tris = buildTris();
   const maxZ = total.value;
-  // 比例适配：高度约束保证整支火箭可见，直径约束限制横向尺寸（细长火箭保持真实比例）
-  const unit = Math.min(w * 0.36 / Math.max(maxR.value * 2.2, 0.01), h * 0.66 / Math.max(maxZ, 0.05)) * scale;
-  // z=0 鼻尖在顶部，火箭沿 z 增向下延伸；主体垂直居中（地面在底部）
-  const baseY = cyp - maxZ * unit * 0.5;
+  // 比例适配：竖版轴向占高、径向占宽；横版轴向占宽、径向占高
+  const unit = (isH.value
+    ? Math.min(w * 0.62 / Math.max(maxZ, 0.05), h * 0.32 / Math.max(maxR.value * 2.2, 0.01))
+    : Math.min(w * 0.36 / Math.max(maxR.value * 2.2, 0.01), h * 0.66 / Math.max(maxZ, 0.05))) * scale;
+  // 竖版：z=0 鼻尖在顶部，主体垂直居中；横版：z=0 鼻尖在左，主体垂直居中
+  const baseY = isH.value ? cyp : cyp - maxZ * unit * 0.5;
+  const axOff = (z: number) => (isH.value ? cxp - maxZ * unit * 0.5 + z * unit : 0);
+  const axPos3 = (z: number) => (isH.value ? axOff(z) : baseY + z * unit);
 
-  // 地面阴影（椭圆）
+  // 地面阴影（竖版在底部；横版在尾部右侧）
   ctx.save();
-  ctx.translate(cxp, baseY + maxZ * unit + 8);
-  ctx.scale(1, 0.24);
+  const shCX = isH.value ? cxp + maxZ * unit * 0.5 + 8 : cxp;
+  const shCY = isH.value ? cyp : baseY + maxZ * unit + 8;
+  ctx.translate(shCX, shCY);
+  ctx.scale(isH.value ? 0.3 : 1, isH.value ? 1 : 0.24);
   const shR = Math.max(maxR.value * unit * 2.2, 20);
   const grad = ctx.createRadialGradient(0, 0, 2, 0, 0, shR);
   grad.addColorStop(0, 'rgba(0,0,0,0.42)');
@@ -298,6 +305,10 @@ function draw(): void {
       const x1 = x * cos - y * sin, y1 = x * sin + y * cos;
       const c2 = Math.cos(tilt), s2 = Math.sin(tilt);
       const y2 = y1 * c2 - z * s2, z2 = y1 * s2 + z * c2;
+      if (isH.value) {
+        // 横版：轴向 z → 屏幕 x（头朝左），半径 → 屏幕 y
+        return { x: cxp - maxZ * unit * 0.5 + z * unit, y: baseY + y1 * unit, depth: y2 };
+      }
       return { x: cxp + x1 * unit, y: baseY + z2 * unit, depth: y2 };
     });
     t.depth = (pr[0].depth + pr[1].depth + pr[2].depth) / 3;
@@ -348,55 +359,88 @@ function draw(): void {
     }
   }
 
-  // CG / CP 位置标记（火箭侧面竖线 + 圆点 + 标签）
+  // CG / CP 位置标记（竖版侧面竖线；横版顶部垂线）
   const c = ctx;
-  const mk = (z: number, color: string, label: string, side: 1 | -1) => {
+  const mk = (z: number, color: string, label: string) => {
     if (!(z >= 0 && z <= maxZ)) return;
-    const y = baseY + z * unit;
-    const x = cxp + side * (maxR.value * unit + 14);
+    const ax = axPos3(z);
+    const perp = isH.value ? cyp - maxR.value * unit - 18 : cxp + (maxR.value * unit + 14);
     c.strokeStyle = color;
     c.lineWidth = 1.6;
     c.setLineDash([4, 3]);
     c.beginPath();
-    c.moveTo(x, y);
-    c.lineTo(x, baseY + maxZ * unit + 10);
-    c.stroke();
-    c.setLineDash([]);
-    c.fillStyle = color;
-    c.beginPath();
-    c.arc(x, y, 4.5, 0, Math.PI * 2);
-    c.fill();
-    c.strokeStyle = 'rgba(255,255,255,0.9)';
-    c.lineWidth = 1.5;
-    c.stroke();
-    c.fillStyle = color;
-    c.font = '600 11px -apple-system, "SF Pro Text", "PingFang SC", sans-serif';
-    c.textAlign = side === 1 ? 'left' : 'right';
-    c.fillText(`${label} ${z.toFixed(3)} m`, x + side * 10, y + 4);
+    if (isH.value) {
+      c.moveTo(ax, cyp - maxR.value * unit - 4);
+      c.lineTo(ax, cyp + maxR.value * unit + 10);
+      c.stroke();
+      c.setLineDash([]);
+      c.fillStyle = color;
+      c.beginPath();
+      c.arc(ax, perp, 4.5, 0, Math.PI * 2);
+      c.fill();
+      c.strokeStyle = 'rgba(255,255,255,0.9)';
+      c.lineWidth = 1.5;
+      c.stroke();
+      c.fillStyle = color;
+      c.font = '600 11px -apple-system, "SF Pro Text", "PingFang SC", sans-serif';
+      c.textAlign = 'center';
+      c.fillText(`${label} ${z.toFixed(3)} m`, ax, perp - 8);
+    } else {
+      c.moveTo(perp, ax);
+      c.lineTo(perp, baseY + maxZ * unit + 10);
+      c.stroke();
+      c.setLineDash([]);
+      c.fillStyle = color;
+      c.beginPath();
+      c.arc(perp, ax, 4.5, 0, Math.PI * 2);
+      c.fill();
+      c.strokeStyle = 'rgba(255,255,255,0.9)';
+      c.lineWidth = 1.5;
+      c.stroke();
+      c.fillStyle = color;
+      c.font = '600 11px -apple-system, "SF Pro Text", "PingFang SC", sans-serif';
+      c.textAlign = perp > cxp ? 'left' : 'right';
+      c.fillText(`${label} ${z.toFixed(3)} m`, perp + (perp > cxp ? 10 : -10), ax + 4);
+    }
   };
-  if (props.cgX !== null && props.cgX !== undefined) mk(props.cgX, '#34c759', 'CG', 1);
-  if (props.cpX !== null && props.cpX !== undefined) mk(props.cpX, '#ff3b30', 'CP', -1);
+  if (props.cgX !== null && props.cgX !== undefined) mk(props.cgX, '#34c759', 'CG');
+  if (props.cpX !== null && props.cpX !== undefined) mk(props.cpX, '#ff3b30', 'CP');
 
-  // Z 轴刻度尺（中心线贯穿短线 + 右侧小字，工程剖面尺风格）
+  // Z 轴刻度尺（竖版中心线垂直+右侧小字；横版中心线水平+下方小字）
   c.strokeStyle = 'rgba(210,232,255,0.3)';
   c.lineWidth = 1;
   c.font = '400 10px -apple-system, "SF Pro Text", "PingFang SC", sans-serif';
   const ticks = 5;
   for (let i = 0; i <= ticks; i++) {
     const z = (maxZ * i) / ticks;
-    const yy = baseY + z * unit;
-    c.beginPath();
-    c.moveTo(cxp - 5, yy);
-    c.lineTo(cxp + 5, yy);
-    c.stroke();
-    c.fillStyle = 'rgba(210,232,255,0.55)';
-    c.textAlign = 'left';
-    c.fillText(z.toFixed(2), cxp + 9, yy + 3);
+    const ap = axPos3(z);
+    if (isH.value) {
+      c.beginPath();
+      c.moveTo(ap, cyp - 5);
+      c.lineTo(ap, cyp + 5);
+      c.stroke();
+      c.fillStyle = 'rgba(210,232,255,0.55)';
+      c.textAlign = 'center';
+      c.fillText(z.toFixed(2), ap, cyp + 16);
+    } else {
+      c.beginPath();
+      c.moveTo(cxp - 5, ap);
+      c.lineTo(cxp + 5, ap);
+      c.stroke();
+      c.fillStyle = 'rgba(210,232,255,0.55)';
+      c.textAlign = 'left';
+      c.fillText(z.toFixed(2), cxp + 9, ap + 3);
+    }
   }
   c.fillStyle = 'rgba(210,232,255,0.6)';
   c.font = '500 10px -apple-system, "SF Pro Text", "PingFang SC", sans-serif';
-  c.textAlign = 'left';
-  c.fillText('Z（轴向）', cxp + 9, baseY + maxZ * unit + 14);
+  if (isH.value) {
+    c.textAlign = 'left';
+    c.fillText('Z（轴向）→', cxp - maxZ * unit * 0.5, cyp + 32);
+  } else {
+    c.textAlign = 'left';
+    c.fillText('Z（轴向）', cxp + 9, baseY + maxZ * unit + 14);
+  }
 
   // XYZ 轴指示器（左下角罗盘，随视角旋转）
   const ox = 52, oy = h - 62;
@@ -436,24 +480,39 @@ function draw(): void {
   c.textAlign = 'center';
   c.fillText('参考系', ox, oy + 18);
 
-  // 尺寸标注：总长 + 最大直径
+  // 尺寸标注：总长 + 最大直径（竖版在底部；横版在顶部）
   ctx.fillStyle = 'rgba(210,228,255,0.9)';
   ctx.font = '500 11px -apple-system, "SF Pro Text", "PingFang SC", sans-serif';
   ctx.textAlign = 'left';
-  const tipY = baseY + maxZ * unit + 6;
-  ctx.fillText(`⏤ ${maxZ.toFixed(3)} m`, cxp + maxR.value * unit + 14, tipY + 4);
-  // 底部直径标尺
-  ctx.strokeStyle = 'rgba(210,228,255,0.4)';
-  ctx.lineWidth = 1;
-  const diaY = baseY + maxZ * unit + 22;
-  const diaX = maxR.value * unit + 10;
-  ctx.beginPath();
-  ctx.moveTo(cxp - diaX, diaY); ctx.lineTo(cxp + diaX, diaY);
-  ctx.moveTo(cxp - diaX, diaY - 4); ctx.lineTo(cxp - diaX, diaY + 4);
-  ctx.moveTo(cxp + diaX, diaY - 4); ctx.lineTo(cxp + diaX, diaY + 4);
-  ctx.stroke();
-  ctx.fillStyle = 'rgba(210,228,255,0.75)';
-  ctx.fillText(`⌀ ${(maxR.value * 2 * 1000).toFixed(0)} mm`, cxp + diaX + 8, diaY + 3);
+  if (isH.value) {
+    const tipY = cyp - maxR.value * unit - 40;
+    ctx.fillText(`⏤ ${maxZ.toFixed(3)} m`, cxp - maxZ * unit * 0.5, tipY);
+    ctx.strokeStyle = 'rgba(210,228,255,0.4)';
+    ctx.lineWidth = 1;
+    const diaX = cxp + maxZ * unit * 0.5 + 16;
+    const diaY = maxR.value * unit;
+    ctx.beginPath();
+    ctx.moveTo(diaX, cyp - diaY); ctx.lineTo(diaX, cyp + diaY);
+    ctx.moveTo(diaX - 4, cyp - diaY); ctx.lineTo(diaX + 4, cyp - diaY);
+    ctx.moveTo(diaX - 4, cyp + diaY); ctx.lineTo(diaX + 4, cyp + diaY);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(210,228,255,0.75)';
+    ctx.fillText(`⌀ ${(maxR.value * 2 * 1000).toFixed(0)} mm`, diaX + 8, cyp);
+  } else {
+    const tipY = baseY + maxZ * unit + 6;
+    ctx.fillText(`⏤ ${maxZ.toFixed(3)} m`, cxp + maxR.value * unit + 14, tipY + 4);
+    ctx.strokeStyle = 'rgba(210,228,255,0.4)';
+    ctx.lineWidth = 1;
+    const diaY = baseY + maxZ * unit + 22;
+    const diaX = maxR.value * unit + 10;
+    ctx.beginPath();
+    ctx.moveTo(cxp - diaX, diaY); ctx.lineTo(cxp + diaX, diaY);
+    ctx.moveTo(cxp - diaX, diaY - 4); ctx.lineTo(cxp - diaX, diaY + 4);
+    ctx.moveTo(cxp + diaX, diaY - 4); ctx.lineTo(cxp + diaX, diaY + 4);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(210,228,255,0.75)';
+    ctx.fillText(`⌀ ${(maxR.value * 2 * 1000).toFixed(0)} mm`, cxp + diaX + 8, diaY + 3);
+  }
 
   // 底部状态行
   ctx.fillStyle = 'rgba(210,228,255,0.55)';

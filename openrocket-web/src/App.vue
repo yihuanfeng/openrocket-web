@@ -10,6 +10,7 @@ import ComponentTree from './components/ComponentTree.vue';
 import PropertyPanel from './components/PropertyPanel.vue';
 import RocketView2D from './components/RocketView2D.vue';
 import RocketView3D from './components/RocketView3D.vue';
+import ExamplesPanel from './components/ExamplesPanel.vue';
 import SimulationPanel from './components/SimulationPanel.vue';
 import { MOTORS, DEFAULT_MOTOR_ID, motorById, parseEngFile } from './lib/engines';
 import type { MotorSpec } from './lib/engines';
@@ -20,6 +21,7 @@ import { PRESETS } from './lib/presets';
 import { modelToOrkBlob } from './lib/orkSerializer';
 
 const viewMode = ref<'2d' | '3d'>('2d');
+const orientation = ref<'vertical' | 'horizontal'>('vertical');
 const view2dRef = ref<InstanceType<typeof RocketView2D> | null>(null);
 const view3dRef = ref<InstanceType<typeof RocketView3D> | null>(null);
 
@@ -192,15 +194,13 @@ function fmtTime(t: number): string {
   return `${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-// 打开页面：有自动存档 → 恢复条（用户决定）；无 → 加载示例
+// 打开页面：默认加载入门小火箭作为工作底稿；有自动存档时额外显示恢复条（用户决定是否恢复）
 onMounted(() => {
   window.addEventListener('keydown', onKeydown);
   const t = localStorage.getItem(AUTO_TIME_KEY);
   const raw = localStorage.getItem(AUTO_KEY);
-  if (t && raw) {
-    restoreInfo.value = { time: fmtTime(Number(t)) };
-    return;
-  }
+  const hasAuto = !!(t && raw);
+  if (hasAuto) suppressSave = true; // 程序化加载入门小火箭期间不覆盖用户上次存档
   const starter = PRESETS[0];
   if (starter) {
     const m = starter.build();
@@ -210,6 +210,10 @@ onMounted(() => {
     history.value = [deepClone(m)];
     historyIndex.value = 0;
     void runAnalyze();
+  }
+  if (hasAuto) {
+    restoreInfo.value = { time: fmtTime(Number(t)) };
+    setTimeout(() => { suppressSave = false; }, 500);
   }
 });
 
@@ -609,6 +613,7 @@ function onPick(e: Event): void {
 
 // —— 新建 / 添加 / 示例 / 保存 ——
 const menuOpen = ref(false);
+const examplesOpen = ref(false);
 const fileMenuEl = ref<HTMLElement | null>(null);
 function closeMenu(e: MouseEvent): void {
   if (menuOpen.value && fileMenuEl.value && !fileMenuEl.value.contains(e.target as Node)) menuOpen.value = false;
@@ -705,6 +710,7 @@ function quickAdd(type: string): void {
 
 function loadPresetByName(name: string): void {
   menuOpen.value = false;
+  examplesOpen.value = false;
   const preset = PRESETS.find((p) => p.name === name);
   if (!preset) return;
   const m = preset.build();
@@ -731,30 +737,11 @@ async function saveOrk(): Promise<void> {
   URL.revokeObjectURL(a.href);
 }
 
-// —— 官方示例（OpenRocket 自带 16 个 .ork，素材已入库 ork-assets/examples）——
-const OFFICIAL_EXAMPLES: { zh: string; file: string }[] = [
-  { zh: '简单模型火箭', file: 'A simple model rocket' },
-  { zh: '三级低功率火箭', file: 'Three stage low power rocket' },
-  { zh: '两级高功率火箭', file: 'Two stage high power rocket' },
-  { zh: '并联助推级', file: 'Parallel booster staging' },
-  { zh: '簇式发动机', file: 'Clustered motors' },
-  { zh: '双伞回收', file: 'Dual parachute deployment' },
-  { zh: '管尾翼火箭', file: 'Tube fin rocket' },
-  { zh: '捆绑舱（翼面）', file: 'Pods--airframes and winglets' },
-  { zh: '捆绑舱（动力回收）', file: 'Pods--powered with recovery deployment' },
-  { zh: '可部署载荷', file: 'Deployable payload' },
-  { zh: '空中点火时序', file: 'Airstart timing' },
-  { zh: 'ARC 载荷火箭', file: 'ARC payload rocket' },
-  { zh: '开伞器释放', file: 'Chute release' },
-  { zh: '仿真脚本', file: 'Simulation scripting' },
-  { zh: '仿真扩展', file: 'Simulation extensions' },
-  { zh: '3D 打印头锥与尾翼', file: '3D printable nose cone and fins' },
-];
-
 async function loadOfficialExample(file: string): Promise<void> {
   error.value = '';
   loading.value = true;
   menuOpen.value = false;
+  examplesOpen.value = false;
   try {
     const resp = await fetch(`/ork-assets/examples/${encodeURIComponent(file)}.ork`);
     if (!resp.ok) throw new Error(`官方示例加载失败（HTTP ${resp.status}）`);
@@ -994,6 +981,8 @@ function stabNote(): string {
       </div>
       <div class="tb-sep"></div>
 
+      <button class="btn onDark examples-trigger" title="打开示例面板" @click="examplesOpen = true">示例 ▾</button>
+
       <div class="menu" ref="fileMenuEl">
         <button class="btn onDark menu-trigger" :class="{ active: menuOpen }" @click.stop="menuOpen = !menuOpen">文件 ▾</button>
         <div v-if="menuOpen" class="menu-panel">
@@ -1001,11 +990,7 @@ function stabNote(): string {
           <label class="mi file">打开…<input ref="fileInput" type="file" accept=".ork,.rkt" style="display: none" @change="onPick" /></label>
           <button class="mi" :disabled="!model" @click="saveOrk">保存 .ork</button>
           <div class="mi-sep"></div>
-          <div class="mi-head">示例设计 · Web 内置</div>
-          <button v-for="p in PRESETS" :key="p.name" class="mi" @click="loadPresetByName(p.name)">{{ p.name }}</button>
-          <div class="mi-sep"></div>
-          <div class="mi-head">示例设计 · OpenRocket 官方（16）</div>
-          <button v-for="o in OFFICIAL_EXAMPLES" :key="o.file" class="mi" :title="o.file + '.ork'" @click="loadOfficialExample(o.file)">{{ o.zh }}<span class="mi-en">{{ o.file }}</span></button>
+          <button class="mi" @click="examplesOpen = true">示例设计面板（内置 6 + 官方 16）…</button>
           <div class="mi-sep"></div>
           <div class="mi-head">导出</div>
           <button class="mi" :disabled="!model" @click="onExportBy('svg')">SVG 图形</button>
@@ -1125,6 +1110,9 @@ function stabNote(): string {
         <div class="seg view-seg">
           <button :class="{ on: viewMode === '2d' }" @click="viewMode = '2d'">2D 侧视</button>
           <button :class="{ on: viewMode === '3d' }" @click="viewMode = '3d'">3D 视图</button>
+          <span class="view-sep"></span>
+          <button :class="{ on: orientation === 'vertical' }" title="火箭竖直摆放" @click="orientation = 'vertical'">竖</button>
+          <button :class="{ on: orientation === 'horizontal' }" title="火箭水平摆放" @click="orientation = 'horizontal'">横</button>
         </div>
         <div class="prev-title">{{ model ? model.name : '火箭预览' }}</div>
         <div class="prev-stab" v-if="previewInfo.stability != null" :style="{ color: stabColor() }" :title="stabNote()">
@@ -1143,8 +1131,8 @@ function stabNote(): string {
 
       <div class="prev-body">
         <div class="canvas-wrap">
-          <RocketView3D ref="view3dRef" v-if="viewMode === '3d' && model" :root="model.root" :selected="selected" :cg-x="analysis?.cgX ?? null" :cp-x="analysis?.cpX ?? null" @hover="hoveredComp = $event" @pick="selected = $event" />
-          <RocketView2D ref="view2dRef" v-else-if="model" :root="model.root" :selected="selected" :unit-mode="unitMode" :cg-x="analysis?.cgX ?? null" :cp-x="analysis?.cpX ?? null" @hover="hoveredComp = $event" @pick="selected = $event" @change="onPropChanged" />
+          <RocketView3D ref="view3dRef" v-if="viewMode === '3d' && model" :root="model.root" :selected="selected" :cg-x="analysis?.cgX ?? null" :cp-x="analysis?.cpX ?? null" :orientation="orientation" @hover="hoveredComp = $event" @pick="selected = $event" />
+          <RocketView2D ref="view2dRef" v-else-if="model" :root="model.root" :selected="selected" :unit-mode="unitMode" :cg-x="analysis?.cgX ?? null" :cp-x="analysis?.cpX ?? null" :orientation="orientation" @hover="hoveredComp = $event" @pick="selected = $event" @change="onPropChanged" />
           <div v-else class="empty-state">
             <div class="es-title">开始设计你的火箭</div>
             <div class="es-cards">
@@ -1183,6 +1171,13 @@ function stabNote(): string {
         <div class="info-item"><span class="i-label">压心 CP</span><span class="i-val">{{ previewInfo.cp != null ? fmtLen2(previewInfo.cp) : '—' }}</span></div>
       </div>
     </section>
+
+    <ExamplesPanel
+      :open="examplesOpen"
+      @close="examplesOpen = false"
+      @load-preset="loadPresetByName"
+      @load-official="loadOfficialExample"
+    />
   </div>
 </template>
 
@@ -1384,6 +1379,7 @@ function stabNote(): string {
   box-shadow: 0 0 6px rgba(10, 132, 255, 0.45);
 }
 .view-seg { flex: none; }
+.view-sep { width: 1px; height: 16px; background: var(--border-strong); margin: 0 4px; align-self: center; }
 .cfg { flex: none; gap: 4px; }
 .cfg-select { max-width: 120px; }
 .mini {
