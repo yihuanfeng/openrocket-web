@@ -38,7 +38,7 @@ const view = computed(() => {
     maxR = Math.max(maxR, s.r0, s.r1);
   }
   const pad = maxR * 0.2 + 0.008;
-  return { height: Math.max(maxZ, 0.05) + pad * 2, maxR, pad };
+  return { height: Math.max(maxZ, 0.05) + pad * 2, maxR, pad, length: maxZ };
 });
 
 const W = 600;
@@ -68,9 +68,14 @@ function shapePath(s: Shape): string {
   const mid = midLine();
   const r0 = radPos(s.r0) - mid, r1 = radPos(s.r1) - mid;
   switch (s.kind) {
-    case 'nosecone':
+    case 'nosecone': {
       // 鼻锥：尖端在鼻端（a0），基部在后（a1，r1=基部半径）
+      const shape = String(s.comp.properties?.['shape'] ?? 'ogive').toLowerCase();
+      if (shape === 'conical') {
+        return `M ${mid} ${a0} L ${mid + r1} ${a1} L ${mid} ${a1} Z`;
+      }
       return `M ${mid} ${a0} Q ${mid + r1 * 0.55} ${(a0 + a1) / 2} ${mid + r1} ${a1} L ${mid} ${a1} Z`;
+    }
     case 'transition':
       return `M ${mid} ${a0} L ${mid + r0} ${a0} L ${mid + r1} ${a1} L ${mid} ${a1} Z`;
     case 'finset':
@@ -82,6 +87,8 @@ function shapePath(s: Shape): string {
     case 'launchlug':
     case 'railbutton':
       return `M ${mid + r0} ${a0} L ${mid + r0} ${a1} L ${mid + r0 * 1.6} ${(a0 + a1) / 2} Z`;
+    case 'tubefinset':
+      return tubeFinPath(s, a0, a1);
     case 'parachute':
     case 'streamer':
       // 收纳伞包：小型伞形
@@ -96,9 +103,23 @@ function finPath(s: Shape, a0: number, a1: number): string {
   const h = parseFloat(s.comp.properties['height'] ?? '') || 0.05;
   const r0 = radPos(s.r0) - midLine();
   const hPx = (h / Math.max(view.value.maxR * 0.7, 0.001)) * (isH.value ? H.value * 0.36 : W * 0.36);
+  const rootc = Math.max(s.z1 - s.z0, 0.001);
+  const tipc = parseFloat(s.comp.properties['tipchord'] ?? '');
+  const tipcPx = (Number.isFinite(tipc) && tipc > 0 ? tipc / rootc : 1) * (a1 - a0);
   const sweep = parseFloat(s.comp.properties['sweep'] ?? '');
-  const sweepPx = (Number.isFinite(sweep) && sweep > 0 ? sweep : (s.z1 - s.z0) * 0.4) / Math.max(view.value.maxR * 0.7, 0.001) * (isH.value ? H.value * 0.36 : W * 0.36);
-  return `M ${midLine() + r0} ${a0} L ${midLine() + r0 + hPx} ${a0 + Math.min(sweepPx, (a1 - a0) * 0.7)} L ${midLine() + r0 + hPx} ${a1} L ${midLine() + r0} ${a1} Z`;
+  const sweepPx = (Number.isFinite(sweep) && sweep > 0 ? sweep : rootc * 0.4) / Math.max(view.value.maxR * 0.7, 0.001) * (isH.value ? H.value * 0.36 : W * 0.36);
+  const tipStart = a0 + Math.min(sweepPx, (a1 - a0) * 0.7);
+  const tipEnd = tipStart + tipcPx;
+  // 梯形翼：翼根[根前 a0, 根后 a1]，翼尖[尖前 tipStart, 尖后 tipEnd]，高 hPx
+  return `M ${midLine() + r0} ${a0} L ${midLine() + r0 + hPx} ${tipStart} L ${midLine() + r0 + hPx} ${Math.min(tipEnd, a1)} L ${midLine() + r0} ${a1} Z`;
+}
+
+/** 管翼（侧视：上下两根小管轮廓，代表环绕管组） */
+function tubeFinPath(s: Shape, a0: number, a1: number): string {
+  const mid = midLine();
+  const tR = radPos(s.r1) - mid; // 小管半径 px
+  const outer = radPos(s.r1 * 2) - mid; // 管中心 ≈ bodyR + tubeR（6 管相切）
+  return `M ${mid + outer - tR} ${a0} L ${mid + outer - tR} ${a1} L ${mid + outer + tR} ${a1} L ${mid + outer + tR} ${a0} Z`;
 }
 
 const isInner = (s: Shape) => ['innertube', 'enginemount', 'engineblock', 'tubecoupler', 'bulkhead', 'centeringring'].includes(s.kind);
@@ -335,7 +356,7 @@ const marks = computed(() => rulerMarks());
           <text :x="axPos(props.cpX) + 6" :y="H / 2 + 60" fill="#ff8f87" font-size="11" font-weight="700">CP {{ props.cpX.toFixed(3) }} m</text>
         </g>
       </template>
-      <text v-if="view.height > 0.05" :x="isH ? W - RULER - 4 : W / 2 + 24" :y="isH ? H / 2 + 22 : H - 10" fill="rgba(190,215,245,0.85)" font-size="10" :text-anchor="isH ? 'end' : 'start'">总长 {{ fmtLen(view ? view.height : 0) }} · {{ isH ? '鼻锥朝左' : '鼻锥朝上' }} · 滚轮缩放 / 空白拖拽平移（×{{ scale.toFixed(1) }}）</text>
+      <text v-if="view.height > 0.05" :x="isH ? W - RULER - 4 : W / 2 + 24" :y="isH ? H / 2 + 22 : H - 10" fill="rgba(190,215,245,0.85)" font-size="10" :text-anchor="isH ? 'end' : 'start'">总长 {{ fmtLen(view.length) }} · {{ isH ? '鼻锥朝左' : '鼻锥朝上' }} · 滚轮缩放 / 空白拖拽平移（×{{ scale.toFixed(1) }}）</text>
     </svg>
     <div v-if="hoverTip" class="hover-tip2d" :style="{ left: hoverTip.x + 14 + 'px', top: hoverTip.y + 10 + 'px' }">
       {{ hoverTip.text }}

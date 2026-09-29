@@ -56,6 +56,17 @@ export function radiusOf(c: RocketComponent, parentR: number): number {
   if (c.type === 'parachute' || c.type === 'streamer') {
     return propPos(c, 'packedradius') || parentR || 0.009;
   }
+  // 管翼：自动半径按官方 TubeFinSet 相切公式；显式 radius 优先
+  if (c.type === 'tubefinset') {
+    const explicit = propPos(c, 'radius');
+    if (isPos(explicit)) return explicit;
+    const n = Math.max(parseInt((c.properties?.['fincount'] ?? '6'), 10) || 6, 1);
+    if (n >= 3) {
+      const s = Math.sin(Math.PI / n);
+      return isPos(parentR * s / (1 - s)) ? (parentR * s) / (1 - s) : parentR;
+    }
+    return parentR;
+  }
   let r = c.radius;
   if (c.type === 'nosecone') {
     r = c.aftRadius;
@@ -117,6 +128,8 @@ export function layoutRocket(root: RocketComponent): GeoSeg[] {
       const r = radiusOf(c, 0);
       const r0 = c.type === 'nosecone' ? 0 : r;
       const r1 = c.type === 'nosecone' ? radiusOf(c, 0) : r;
+      // 父实体先 push（2D SVG 中父在下层，子组件叠在其上可见）
+      segs.push({ kind: c.type, name: c.name, comp: c, z0, z1, r0, r1, parentZ0: sBase, parentLen: estLen, depth: 0 });
       // 子组件（内部件/挂件/尾翼）：父 = 本组件，outerLen = 本组件长度
       for (const ch of c.children ?? []) {
         const clen = lenOf(ch);
@@ -141,7 +154,6 @@ export function layoutRocket(root: RocketComponent): GeoSeg[] {
           depth: 1,
         });
       }
-      segs.push({ kind: c.type, name: c.name, comp: c, z0, z1, r0, r1, parentZ0: sBase, parentLen: estLen, depth: 0 });
       cursor = Math.max(cursor, z1);
     }
     base = cursor;

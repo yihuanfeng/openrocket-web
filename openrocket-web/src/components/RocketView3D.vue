@@ -81,17 +81,18 @@ function buildTris(): Tri[] {
     tris.push({ pts: [a, b, c], depth: 0, color: triColor(seg, light), selected: sel, cls, comp: seg.comp });
     tris.push({ pts: [a, c, d], depth: 0, color: triColor(seg, light * 0.96), selected: sel, cls, comp: seg.comp });
   };
-  const segAdd = (s: Seg, z0: number, z1: number, r0: number, r1: number) => {
+  const segAdd = (s: Seg, z0: number, z1: number, r0: number, r1: number, cx = 0, cy = 0) => {
     const steps = s.kind === 'nosecone' ? 6 : 2;
+    const conical = s.kind === 'nosecone' && String(s.comp.properties?.['shape'] ?? 'ogive').toLowerCase() === 'conical';
     const zs: number[] = [];
     for (let i = 0; i <= steps; i++) zs.push(z0 + (z1 - z0) * i / steps);
     const rings = zs.map((z, i) => {
       const t = i / steps;
-      const r = r0 + (r1 - r0) * (s.kind === 'nosecone' ? Math.sin(t * Math.PI / 2) : t);
+      const r = r0 + (r1 - r0) * (conical ? t : s.kind === 'nosecone' ? Math.sin(t * Math.PI / 2) : t);
       const ring: [number, number, number][] = [];
       for (let j = 0; j < N; j++) {
         const th = (j / N) * Math.PI * 2;
-        ring.push([r * Math.cos(th), r * Math.sin(th), z]);
+        ring.push([cx + r * Math.cos(th), cy + r * Math.sin(th), z]);
       }
       return ring;
     });
@@ -109,11 +110,25 @@ function buildTris(): Tri[] {
     }
   };
   for (const s of segs.value) {
-    segAdd(s, s.z0, s.z1, s.r0, s.r1);
-    if (s.kind.includes('fin')) {
+    if (s.kind !== 'tubefinset') segAdd(s, s.z0, s.z1, s.r0, s.r1);
+    if (s.kind === 'tubefinset') {
+      // 管翼：N 根小管环绕（官方相切布局），每根画为偏移圆柱
+      const count = Math.max(parseInt(propNum(s.comp, 'fincount', 6).toString(), 10) || 6, 1);
+      const tubeR = Math.max(s.r0, s.r1, 0.0005);
+      const rr = Math.max(s.r0, s.r1, 0.001);
+      // 管中心距 = bodyR + tubeR（官方相切）；parentR 用 6 管相切公式反推（bodyR = tubeR*sin(π/n)/(1-sin) 的逆用：近似 2*tubeR 对 n=6）
+      const parentR = count === 6 ? tubeR : tubeR * (1 - Math.sin(Math.PI / count)) / Math.sin(Math.PI / count);
+      const centerD = parentR + tubeR;
+      const angle0 = (parseFloat(s.comp.properties?.['angleoffset'] ?? '') || 0) * Math.PI / 180;
+      for (let f = 0; f < count; f++) {
+        const th = angle0 + (f / count) * Math.PI * 2;
+        segAdd(s, s.z0, s.z1, tubeR, tubeR, (rr + centerD - tubeR) * Math.cos(th), (rr + centerD - tubeR) * Math.sin(th));
+      }
+    } else if (s.kind.includes('fin')) {
       const h = Math.max(propNum(s.comp, 'height', 0.05), 0);
       const count = Math.max(parseInt(propNum(s.comp, 'fincount', 3).toString(), 10) || 3, 1);
       const rootc = Math.max(propNum(s.comp, 'rootchord', s.z1 - s.z0), 0.001);
+      const tipc = Math.max(propNum(s.comp, 'tipchord', rootc * 0.8), 0.001);
       const sweep = Math.max(propNum(s.comp, 'sweep', 0), 0);
       const sel = s.comp === props.selected;
       const rr = Math.max(s.r0, s.r1, 0.001);
@@ -122,12 +137,13 @@ function buildTris(): Tri[] {
         const cos = Math.cos(th), sin = Math.sin(th);
         const px = (r: number) => [rr * cos + r * cos, rr * sin + r * sin] as [number, number];
         // 前缘（带后掠）、后缘（带锥度）——梯形翼立体
-
+        const tipStart = Math.min(s.z0 + sweep, s.z0 + rootc * 0.8);
+        const tipEnd = Math.min(tipStart + tipc, s.z0 + rootc);
         // 四个角点（翼根前/后、翼尖前/后）
         const a: [number, number, number] = [...px(0), s.z0];          // 根前
-        const b: [number, number, number] = [...px(h), s.z0 + Math.min(sweep, rootc)]; // 尖前（后掠）
-        const c: [number, number, number] = [...px(h), s.z0 + rootc]; // 尖后
-        const d: [number, number, number] = [...px(0), s.z0 + rootc]; // 根后
+        const b: [number, number, number] = [...px(h), tipStart];      // 尖前（后掠）
+        const c: [number, number, number] = [...px(h), tipEnd];        // 尖后（锥度）
+        const d: [number, number, number] = [...px(0), s.z0 + rootc];  // 根后
         const light = 0.5 + 0.4 * Math.abs(cos);
         addQuad(a, b, c, d, s, light, sel);
         // 翼板厚度（薄板）
