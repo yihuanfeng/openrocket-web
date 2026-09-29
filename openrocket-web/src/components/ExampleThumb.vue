@@ -2,48 +2,14 @@
 // 示例缩略图：水平绘制火箭轮廓小图（复用 OpenRocket 轴向语义，z=0 鼻尖朝左）
 import { computed } from 'vue';
 import type { RocketComponent } from '../lib/types';
+import { layoutRocket, type GeoSeg } from '../lib/geometry';
 
 const props = defineProps<{ root: RocketComponent }>();
 
-interface Th {
-  z0: number; z1: number;
-  r0: number; r1: number;
-  kind: string;
-}
-function radiusAt(r: number): number { return isNaN(r) ? 0 : Math.max(0, r); }
-function lengthOf(c: RocketComponent): number { const l = c.length; return isNaN(l) ? 0 : Math.max(0, l); }
+type Th = GeoSeg;
 
-function buildShapes(root: RocketComponent): Th[] {
-  const shapes: Th[] = [];
-  let base = 0;
-  for (const stage of root.children.filter((c) => c.type === 'stage')) {
-    let cursor = base;
-    for (const c of stage.children) {
-      let len = lengthOf(c);
-      if (c.type === 'shockcord' || c.type === 'streamer' || c.type === 'masscomponent') len = 0;
-      const off = isNaN(c.axialOffset) ? cursor : Math.max(cursor, c.axialOffset);
-      const s: Th = {
-        kind: c.type, z0: off, z1: off + len,
-        r0: radiusAt(c.radius), r1: radiusAt(c.aftRadius),
-      };
-      if (c.type === 'nosecone') { s.r0 = 0; s.r1 = radiusAt(c.radius); }
-      shapes.push(s);
-      cursor = off + len;
-      for (const child of c.children) {
-        const clen = lengthOf(child);
-        const coff = isNaN(child.axialOffset) ? 0 : child.axialOffset;
-        shapes.push({
-          kind: child.type, z0: off + coff, z1: off + coff + clen,
-          r0: radiusAt(child.radius), r1: radiusAt(child.aftRadius),
-        });
-      }
-    }
-    base = cursor;
-  }
-  return shapes;
-}
-
-const shapes = computed(() => buildShapes(props.root));
+/** 统一几何布局（官方轴向语义 + 半径继承），与 2D/3D 一致 */
+const shapes = computed(() => layoutRocket(props.root));
 const view = computed(() => {
   let maxZ = 0, maxR = 0;
   for (const s of shapes.value) {

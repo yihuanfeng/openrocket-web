@@ -6,6 +6,13 @@ import { materialDensity } from './materials';
 
 const XML_DECL = "<?xml version='1.0' encoding='utf-8'?>\n";
 
+/** 轴向偏移序列化：无显式偏移（NaN）= 官方 AFTER 自动接续，不写 <axialoffset> */
+function axLine(c: RocketComponent, method: string): string {
+  return Number.isFinite(c.axialOffset)
+    ? `<axialoffset method="${method}">${numStr(c.axialOffset)}</axialoffset>`
+    : '';
+}
+
 function numStr(v: number | undefined, fallback = 0): string {
   const x = v !== undefined && Number.isFinite(v) ? v : fallback;
   // 保留足够精度，去掉多余尾零
@@ -103,7 +110,7 @@ function compToXml(c: RocketComponent, depth: number): string {
       lines.push(...commonMeta(c, ind2));
       lines.push(`${ind2}<instancecount>${Math.round(numProp(p, 'fincount', 3))}</instancecount>`);
       // 轴向位置：absolute（相对父组件 fore，与前端 axialOffset 语义一致，round-trip 保真）
-      lines.push(`${ind2}<axialoffset method="absolute">${numStr(c.axialOffset)}</axialoffset>`);
+      lines.push(`${ind2}${axLine(c, 'absolute')}`);
       lines.push(`${ind2}<position type="absolute">${numStr(c.axialOffset)}</position>`);
       lines.push(`${ind2}<radiusoffset method="surface">0.0</radiusoffset>`);
       lines.push(`${ind2}<angleoffset method="relative">0.0</angleoffset>`);
@@ -122,7 +129,7 @@ function compToXml(c: RocketComponent, depth: number): string {
       lines.push(`${ind}<parachute>`);
       lines.push(`${ind2}<name>${esc(c.name || 'Parachute')}</name>`);
       lines.push(...commonMeta(c, ind2));
-      lines.push(`${ind2}<axialoffset method="absolute">${numStr(c.axialOffset)}</axialoffset>`);
+      lines.push(`${ind2}${axLine(c, 'absolute')}`);
       lines.push(`${ind2}<packedlength>${numStr(numProp(p, 'packedlength', 0.05))}</packedlength>`);
       lines.push(`${ind2}<packedradius>${numStr(numProp(p, 'packedradius', 0.02))}</packedradius>`);
       if (p['deployevent']) lines.push(`${ind2}<deployevent>${esc(p['deployevent'])}</deployevent>`);
@@ -138,7 +145,7 @@ function compToXml(c: RocketComponent, depth: number): string {
       lines.push(...commonMeta(c, ind2));
       lines.push(`${ind2}<length>${numStr(c.length)}</length>`);
       lines.push(`${ind2}<radius>${numStr(c.radius)}</radius>`);
-      lines.push(`${ind2}<axialoffset method="top">${numStr(c.axialOffset)}</axialoffset>`);
+      lines.push(`${ind2}${axLine(c, 'top')}`);
       break;
     case 'innertube':
       lines.push(`${ind}<innertube>`);
@@ -147,20 +154,20 @@ function compToXml(c: RocketComponent, depth: number): string {
       lines.push(`${ind2}<length>${numStr(c.length)}</length>`);
       lines.push(`${ind2}<radius>${numStr(c.radius)}</radius>`);
       lines.push(`${ind2}<motormount>true</motormount>`);
-      lines.push(`${ind2}<axialoffset method="absolute">${numStr(c.axialOffset)}</axialoffset>`);
+      lines.push(`${ind2}${axLine(c, 'absolute')}`);
       break;
     case 'shockcord':
       lines.push(`${ind}<shockcord>`);
       lines.push(`${ind2}<name>${esc(c.name || 'Shock cord')}</name>`);
       lines.push(...commonMeta(c, ind2));
       lines.push(`${ind2}<cordlength>${numStr(numProp(p, 'cordlength', 0.2))}</cordlength>`);
-      lines.push(`${ind2}<axialoffset method="absolute">${numStr(c.axialOffset)}</axialoffset>`);
+      lines.push(`${ind2}${axLine(c, 'absolute')}`);
       break;
     case 'streamer':
       lines.push(`${ind}<streamer>`);
       lines.push(`${ind2}<name>${esc(c.name || 'Streamer')}</name>`);
       lines.push(...commonMeta(c, ind2));
-      lines.push(`${ind2}<axialoffset method="absolute">${numStr(c.axialOffset)}</axialoffset>`);
+      lines.push(`${ind2}${axLine(c, 'absolute')}`);
       lines.push(`${ind2}<stripnumber>1</stripnumber>`);
       lines.push(`${ind2}<striplength>${numStr(c.length || 0.3)}</striplength>`);
       lines.push(`${ind2}<stripwidth>0.05</stripwidth>`);
@@ -170,14 +177,14 @@ function compToXml(c: RocketComponent, depth: number): string {
       lines.push(`${ind2}<name>${esc(c.name || 'Mass component')}</name>`);
       lines.push(...commonMeta(c, ind2));
       lines.push(`${ind2}<mass>${numStr(numProp(p, 'mass', 0.01))}</mass>`);
-      lines.push(`${ind2}<axialoffset method="absolute">${numStr(c.axialOffset)}</axialoffset>`);
+      lines.push(`${ind2}${axLine(c, 'absolute')}`);
       break;
     case 'freeformfinset': {
       lines.push(`${ind}<freeformfinset>`);
       lines.push(`${ind2}<name>${esc(c.name || 'Free-form fin set')}</name>`);
       lines.push(...commonMeta(c, ind2));
       lines.push(`${ind2}<instancecount>${Math.round(numProp(p, 'fincount', 3))}</instancecount>`);
-      lines.push(`${ind2}<axialoffset method="absolute">${numStr(c.axialOffset)}</axialoffset>`);
+      lines.push(`${ind2}${axLine(c, 'absolute')}`);
       lines.push(`${ind2}<position type="absolute">${numStr(c.axialOffset)}</position>`);
       lines.push(`${ind2}<radiusoffset method="surface">0.0</radiusoffset>`);
       lines.push(`${ind2}<angleoffset method="relative">0.0</angleoffset>`);
@@ -195,7 +202,7 @@ function compToXml(c: RocketComponent, depth: number): string {
       lines.push(`${ind}<tubecoupler>`);
       lines.push(`${ind2}<name>${esc(c.name || 'Tube coupler')}</name>`);
       lines.push(...commonMeta(c, ind2));
-      lines.push(`${ind2}<axialoffset method="absolute">${numStr(c.axialOffset)}</axialoffset>`);
+      lines.push(`${ind2}${axLine(c, 'absolute')}`);
       lines.push(`${ind2}<length>${numStr(c.length)}</length>`);
       lines.push(`${ind2}<radius>${numStr(c.radius)}</radius>`);
       lines.push(`${ind2}<thickness>${numStr(numProp(p, 'thickness', 0.0007))}</thickness>`);
@@ -204,7 +211,7 @@ function compToXml(c: RocketComponent, depth: number): string {
       lines.push(`${ind}<bulkhead>`);
       lines.push(`${ind2}<name>${esc(c.name || 'Bulkhead')}</name>`);
       lines.push(...commonMeta(c, ind2));
-      lines.push(`${ind2}<axialoffset method="absolute">${numStr(c.axialOffset)}</axialoffset>`);
+      lines.push(`${ind2}${axLine(c, 'absolute')}`);
       lines.push(`${ind2}<length>${numStr(c.length)}</length>`);
       lines.push(`${ind2}<radius>${numStr(c.radius)}</radius>`);
       lines.push(`${ind2}<thickness>${numStr(numProp(p, 'thickness', 0.003))}</thickness>`);
@@ -213,7 +220,7 @@ function compToXml(c: RocketComponent, depth: number): string {
       lines.push(`${ind}<centeringring>`);
       lines.push(`${ind2}<name>${esc(c.name || 'Centering ring')}</name>`);
       lines.push(...commonMeta(c, ind2));
-      lines.push(`${ind2}<axialoffset method="absolute">${numStr(c.axialOffset)}</axialoffset>`);
+      lines.push(`${ind2}${axLine(c, 'absolute')}`);
       lines.push(`${ind2}<length>${numStr(c.length)}</length>`);
       lines.push(`${ind2}<radius>${numStr(c.radius)}</radius>`);
       lines.push(`${ind2}<thickness>${numStr(numProp(p, 'thickness', 0.003))}</thickness>`);
@@ -222,7 +229,7 @@ function compToXml(c: RocketComponent, depth: number): string {
       lines.push(`${ind}<engineblock>`);
       lines.push(`${ind2}<name>${esc(c.name || 'Engine block')}</name>`);
       lines.push(...commonMeta(c, ind2));
-      lines.push(`${ind2}<axialoffset method="absolute">${numStr(c.axialOffset)}</axialoffset>`);
+      lines.push(`${ind2}${axLine(c, 'absolute')}`);
       lines.push(`${ind2}<length>${numStr(c.length)}</length>`);
       lines.push(`${ind2}<radius>${numStr(c.radius)}</radius>`);
       lines.push(`${ind2}<thickness>${numStr(numProp(p, 'thickness', 0.005))}</thickness>`);
@@ -232,7 +239,7 @@ function compToXml(c: RocketComponent, depth: number): string {
       lines.push(`${ind2}<name>${esc(c.name || 'Elliptical fin set')}</name>`);
       lines.push(...commonMeta(c, ind2));
       lines.push(`${ind2}<instancecount>${Math.round(numProp(p, 'fincount', 3))}</instancecount>`);
-      lines.push(`${ind2}<axialoffset method="absolute">${numStr(c.axialOffset)}</axialoffset>`);
+      lines.push(`${ind2}${axLine(c, 'absolute')}`);
       lines.push(`${ind2}<position type="absolute">${numStr(c.axialOffset)}</position>`);
       lines.push(`${ind2}<radiusoffset method="surface">0.0</radiusoffset>`);
       lines.push(`${ind2}<angleoffset method="relative">0.0</angleoffset>`);

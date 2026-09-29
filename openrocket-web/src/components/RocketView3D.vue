@@ -2,73 +2,22 @@
 // 3D 视图 v2：Apple 标准材质渲染——金属高光 / 地面阴影 / 尺寸标注 / 部件高亮
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import type { RocketComponent } from '../lib/types';
+import { layoutRocket, type GeoSeg } from '../lib/geometry';
 
 const props = defineProps<{ root: RocketComponent; selected?: RocketComponent | null; cgX?: number | null; cpX?: number | null; orientation?: 'vertical' | 'horizontal' }>();
 const emit = defineEmits<{ hover: [c: RocketComponent | null]; pick: [c: RocketComponent] }>();
 const isH = computed(() => props.orientation === 'horizontal');
 
-interface Seg {
-  z0: number; z1: number;
-  r0: number; r1: number;
-  kind: string;
-  comp: RocketComponent;
-}
+type Seg = GeoSeg;
 
-function radiusAt(r: number): number {
-  return isNaN(r) ? 0 : Math.max(0, r);
-}
-function lengthOf(c: RocketComponent): number {
-  const l = c.length;
-  return isNaN(l) ? 0 : Math.max(0, l);
-}
 function propNum(c: RocketComponent, k: string, d: number): number {
   const v = parseFloat(c.properties?.[k] ?? '');
   return Number.isFinite(v) ? v : d;
 }
 
-/** 轴向堆叠（OpenRocket 语义：z=0 鼻尖/视觉顶部，z 递增向尾部；stage 数组顺序=鼻端→尾部，
- *  第一个 stage 在最上方；尾翼挂父组件尾部 bottom 定位） */
+/** 轴向段：统一几何布局（官方轴向语义 + 半径继承），2D/3D 共用同一几何 */
 function buildSegs(root: RocketComponent): Seg[] {
-  const segs: Seg[] = [];
-  let base = 0; // 鼻端偏移（逐级向尾部推进）
-  for (const stage of root.children.filter((c) => c.type === 'stage')) {
-    let cursor = base;
-    for (const c of stage.children) {
-      let len = lengthOf(c);
-      const isHang = c.type === 'shockcord' || c.type === 'streamer' || c.type === 'masscomponent';
-      if (isHang) len = 0;
-      let off: number;
-      if (c.type.includes('fin')) {
-        // 尾翼：挂上一轴向组件底部 − rootchord（rootchord 缺省回退 length）
-        off = cursor - Math.max(propNum(c, 'rootchord', 0) || propNum(c, 'length', 0.05), 0);
-      } else {
-        off = isNaN(c.axialOffset) ? cursor : Math.max(cursor, c.axialOffset);
-      }
-      let r0 = radiusAt(c.radius);
-      let r1 = radiusAt(c.aftRadius);
-      if (c.type === 'nosecone') { r1 = Math.max(r0, r1); r0 = 0; } // 尖端朝上
-      const s: Seg = { z0: off, z1: off + len, r0, r1, kind: c.type, comp: c };
-      segs.push(s);
-      cursor = off + len;
-      // 子组件（挂件 / 尾翼 / 内部件）
-      for (const child of c.children ?? []) {
-        const clen = lengthOf(child);
-        let coff: number;
-        if (child.type.includes('fin')) {
-          coff = off + len - Math.max(propNum(child, 'rootchord', 0) || propNum(child, 'length', 0.05), 0);
-        } else {
-          coff = off + (isNaN(child.axialOffset) ? 0 : Math.max(0, child.axialOffset));
-        }
-        segs.push({
-          z0: coff, z1: coff + clen,
-          r0: radiusAt(child.radius), r1: radiusAt(child.aftRadius),
-          kind: child.type, comp: child,
-        });
-      }
-    }
-    base = cursor;
-  }
-  return segs;
+  return layoutRocket(root);
 }
 
 const segs = computed(() => buildSegs(props.root));
@@ -663,17 +612,21 @@ onBeforeUnmount(() => {
 <style scoped>
 .view3d {
   position: relative;
+  display: flex;
   background: linear-gradient(180deg, #0a2b66, #071a45);
   border: 1px solid #123a7a;
   border-radius: var(--r-md);
   overflow: hidden;
-  min-height: 300px;
+  min-height: 0;
+  height: 100%;
   box-shadow: inset 0 0 40px rgba(10, 132, 255, 0.08);
 }
 .cv {
   display: block;
+  flex: 1;
   width: 100%;
-  height: 360px;
+  height: 100%;
+  min-height: 0;
   cursor: grab;
   touch-action: none;
 }

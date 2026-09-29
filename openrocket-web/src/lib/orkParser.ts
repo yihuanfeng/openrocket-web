@@ -9,8 +9,17 @@ function parseNum(raw: string | null | undefined): number {
   return m ? parseFloat(m[0]) : NaN;
 }
 
+/** 只取 el 的直接子元素中的同名标签（避免 getElementsByTagName 递归误读后代组件的同名元素） */
+function childOf(el: Element, tag: string): Element | null {
+  const t = tag.toLowerCase();
+  for (const ch of Array.from(el.children)) {
+    if (ch.tagName.toLowerCase() === t) return ch;
+  }
+  return null;
+}
+
 function textOf(el: Element, tag: string): string | null {
-  const child = el.getElementsByTagName(tag)[0];
+  const child = childOf(el, tag);
   if (!child) return null;
   const text = child.textContent;
   return text === null ? null : text.trim();
@@ -20,6 +29,13 @@ function numOf(el: Element, tag: string): number {
   return parseNum(textOf(el, tag));
 }
 
+/** 读取 <axialoffset method="top|bottom|middle|absolute|after">值</axialoffset> */
+function axialOf(el: Element): { offset: number; method: string } {
+  const ao = childOf(el, 'axialoffset');
+  if (!ao) return { offset: NaN, method: '' };
+  return { offset: parseNum(ao.textContent), method: ao.getAttribute('method') ?? '' };
+}
+
 /** 递归解析 <subcomponents> 下的组件节点 */
 function parseChildren(parentEl: Element, parent: RocketComponent): void {
   const sub = parentEl.getElementsByTagName('subcomponents')[0];
@@ -27,6 +43,7 @@ function parseChildren(parentEl: Element, parent: RocketComponent): void {
   for (const el of Array.from(sub.children)) {
     const tag = el.tagName.toLowerCase();
     if (tag === 'stage') {
+      const ao = axialOf(el);
       const stage: RocketComponent = {
         type: 'stage',
         name: textOf(el, 'name') ?? 'Stage',
@@ -35,7 +52,8 @@ function parseChildren(parentEl: Element, parent: RocketComponent): void {
         length: 0,
         radius: NaN,
         aftRadius: NaN,
-        axialOffset: 0,
+        axialOffset: ao.offset,
+        axialMethod: ao.method,
         shape: '',
       };
       parseChildren(el, stage);
@@ -60,6 +78,7 @@ function parseChildren(parentEl: Element, parent: RocketComponent): void {
         if (eq > 0) metaProps[kv.slice(0, eq).trim()] = kv.slice(eq + 1).trim();
       }
     }
+    const ao = axialOf(el);
     const comp: RocketComponent = {
       type: tag,
       name: textOf(el, 'name') ?? tag,
@@ -68,7 +87,8 @@ function parseChildren(parentEl: Element, parent: RocketComponent): void {
       length: numOf(el, 'length'),
       radius: numOf(el, 'radius'),
       aftRadius: numOf(el, 'aftradius'),
-      axialOffset: numOf(el, 'axialoffset'),
+      axialOffset: ao.offset,
+      axialMethod: ao.method,
       shape: textOf(el, 'shape') ?? '',
       density,
     };
@@ -148,7 +168,8 @@ export async function parseOrk(buffer: ArrayBuffer): Promise<RocketModel> {
     length: 0,
     radius: NaN,
     aftRadius: NaN,
-    axialOffset: 0,
+    axialOffset: NaN,
+    axialMethod: '',
     shape: '',
   };
   parseChildren(rocketEl, root);

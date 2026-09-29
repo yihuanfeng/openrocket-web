@@ -26,8 +26,8 @@ export const DEFAULT_PARAMS: Record<string, ComponentParams> = {
   bodytube: { length: 0.3, radius: 0.02 },
   transition: { length: 0.05, radius: 0.02, aftRadius: 0.015, shape: 'conical' },
   trapezoidfinset: { finCount: 3, rootChord: 0.06, tipChord: 0.04, sweep: 0.03, height: 0.05, thickness: 0.0032 },
-  parachute: { axialOffset: 0 },
-  launchlug: { length: 0.05, radius: 0.0022, axialOffset: 0 },
+  parachute: {},
+  launchlug: { length: 0.05, radius: 0.0022 },
   innertube: { length: 0.07, radius: 0.009 },
   // P0-1 新增
   ellipticalfinset: { finCount: 3, rootChord: 0.06, height: 0.05, thickness: 0.0032 },
@@ -36,9 +36,9 @@ export const DEFAULT_PARAMS: Record<string, ComponentParams> = {
   bulkhead: { length: 0.003, radius: 0.02 },
   centeringring: { length: 0.005, radius: 0.02 },
   engineblock: { length: 0.01, radius: 0.009 },
-  masscomponent: { axialOffset: 0 },
-  streamer: { length: 0.3, axialOffset: 0 },
-  shockcord: { axialOffset: 0 },
+  masscomponent: {},
+  streamer: { length: 0.3 },
+  shockcord: {},
 };
 
 export const COMPONENT_TYPES: { code: string; label: string; quick: string }[] = [
@@ -73,7 +73,7 @@ export function makeComponent(type: string, over: ComponentParams = {}): RocketC
     length: 0,
     radius: 0,
     aftRadius: 0,
-    axialOffset: n(p.axialOffset, 0),
+    axialOffset: n(p.axialOffset, NaN),
     shape: '',
     density: Math.max(0, n(p.density, 0)),
   };
@@ -129,7 +129,7 @@ export function makeComponent(type: string, over: ComponentParams = {}): RocketC
         ...base,
         type: 'parachute',
         name: '降落伞',
-        axialOffset: Math.max(0, n(p.axialOffset, 0)),
+        axialOffset: Math.max(0, n(p.axialOffset, NaN)),
         properties: {},
       };
     case 'launchlug':
@@ -139,7 +139,7 @@ export function makeComponent(type: string, over: ComponentParams = {}): RocketC
         name: '发射导环',
         length: Math.max(0, n(p.length, 0.05)),
         radius: Math.max(0, n(p.radius, 0.0022)),
-        axialOffset: Math.max(0, n(p.axialOffset, 0)),
+        axialOffset: Math.max(0, n(p.axialOffset, NaN)),
         properties: {},
       };
     case 'innertube':
@@ -222,7 +222,7 @@ export function makeComponent(type: string, over: ComponentParams = {}): RocketC
         ...base,
         type: 'masscomponent',
         name: '配重',
-        axialOffset: Math.max(0, n(p.axialOffset, 0)),
+        axialOffset: Math.max(0, n(p.axialOffset, NaN)),
         properties: { mass: '0.01' },
       };
     case 'streamer':
@@ -231,7 +231,7 @@ export function makeComponent(type: string, over: ComponentParams = {}): RocketC
         type: 'streamer',
         name: '飘带',
         length: Math.max(0, n(p.length, 0.3)),
-        axialOffset: Math.max(0, n(p.axialOffset, 0)),
+        axialOffset: Math.max(0, n(p.axialOffset, NaN)),
         properties: {},
       };
     case 'shockcord':
@@ -239,7 +239,7 @@ export function makeComponent(type: string, over: ComponentParams = {}): RocketC
         ...base,
         type: 'shockcord',
         name: '冲击绳',
-        axialOffset: Math.max(0, n(p.axialOffset, 0)),
+        axialOffset: Math.max(0, n(p.axialOffset, NaN)),
         properties: { cordlength: '0.2' },
       };
     default:

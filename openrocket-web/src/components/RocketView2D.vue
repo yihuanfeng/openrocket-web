@@ -2,6 +2,7 @@
 // 2D 侧视图：支持横/竖两种摆放（竖=鼻锥朝上，横=鼻锥朝左），沿轴线渲染外形轮廓
 import { computed, ref } from 'vue';
 import type { RocketComponent } from '../lib/types';
+import { layoutRocket, type GeoSeg } from '../lib/geometry';
 
 const props = defineProps<{
   root: RocketComponent;
@@ -20,66 +21,11 @@ const emit = defineEmits<{ hover: [c: RocketComponent | null]; pick: [c: RocketC
 
 const isH = computed(() => props.orientation === 'horizontal');
 
-interface Shape {
-  z0: number; z1: number;   // 轴向范围（米），0=鼻端，向上递增向尾部
-  r0: number; r1: number;   // 前/后半径（米）
-  kind: string;
-  name: string;
-  comp: RocketComponent;
-}
+type Shape = GeoSeg;
 
-function radiusAt(r: number): number {
-  return isNaN(r) ? 0 : Math.max(0, r);
-}
-function lengthOf(c: RocketComponent): number {
-  const l = c.length;
-  return isNaN(l) ? 0 : Math.max(0, l);
-}
-
-/** 计算外形链：OpenRocket 轴向语义 —— z=0 在鼻尖，z 递增向尾部；stage 数组顺序=鼻端→尾部 */
+/** 外形链：统一几何布局（官方轴向语义 + 半径继承） */
 function buildShapes(root: RocketComponent): Shape[] {
-  const shapes: Shape[] = [];
-  const stages = root.children.filter((c) => c.type === 'stage');
-  let base = 0;
-  for (const stage of stages) {
-    let cursor = base;
-    for (const c of stage.children) {
-      let len = lengthOf(c);
-      const isHang = c.type === 'shockcord' || c.type === 'streamer' || c.type === 'masscomponent';
-      if (isHang) len = 0;
-      const off = isNaN(c.axialOffset) ? cursor : Math.max(cursor, c.axialOffset);
-      const s: Shape = {
-        kind: c.type,
-        z0: off,
-        z1: off + len,
-        r0: radiusAt(c.radius),
-        r1: radiusAt(c.aftRadius),
-        name: c.name,
-        comp: c,
-      };
-      if (c.type === 'nosecone') {
-        s.r0 = 0;
-        s.r1 = radiusAt(c.radius);
-      }
-      shapes.push(s);
-      cursor = off + len;
-      for (const child of c.children) {
-        const clen = lengthOf(child);
-        const coff = isNaN(child.axialOffset) ? 0 : child.axialOffset;
-        shapes.push({
-          kind: child.type,
-          z0: off + coff,
-          z1: off + coff + clen,
-          r0: radiusAt(child.radius),
-          r1: radiusAt(child.aftRadius),
-          name: child.name,
-          comp: child,
-        });
-      }
-    }
-    base = cursor;
-  }
-  return shapes;
+  return layoutRocket(root);
 }
 
 const shapes = computed(() => buildShapes(props.root));
@@ -131,24 +77,31 @@ function shapePath(s: Shape): string {
     case 'fintab':
     case 'trapezoidfinset':
     case 'ellipticalfinset':
+    case 'freeformfinset':
       return finPath(s, a0, a1);
     case 'launchlug':
     case 'railbutton':
       return `M ${mid + r0} ${a0} L ${mid + r0} ${a1} L ${mid + r0 * 1.6} ${(a0 + a1) / 2} Z`;
+    case 'parachute':
+    case 'streamer':
+      // 收纳伞包：小型伞形
+      return `M ${mid} ${a0} L ${mid + r0} ${a0} L ${mid + r1 * 1.4} ${(a0 + a1) / 2} L ${mid + r0} ${a1} L ${mid} ${a1} Z`;
     default:
       return `M ${mid} ${a0} L ${mid + r0} ${a0} L ${mid + r1} ${a1} L ${mid} ${a1} Z`;
   }
 }
 
-/** 尾翼（一侧三角板） */
+/** 尾翼（一侧梯形板，根弦 = z1-z0，高 = height） */
 function finPath(s: Shape, a0: number, a1: number): string {
   const h = parseFloat(s.comp.properties['height'] ?? '') || 0.05;
   const r0 = radPos(s.r0) - midLine();
   const hPx = (h / Math.max(view.value.maxR * 0.7, 0.001)) * (isH.value ? H.value * 0.36 : W * 0.36);
-  return `M ${midLine() + r0} ${a0} L ${midLine() + r0 + hPx} ${a0} L ${midLine() + r0 + hPx} ${a1} L ${midLine() + r0} ${a1} Z`;
+  const sweep = parseFloat(s.comp.properties['sweep'] ?? '');
+  const sweepPx = (Number.isFinite(sweep) && sweep > 0 ? sweep : (s.z1 - s.z0) * 0.4) / Math.max(view.value.maxR * 0.7, 0.001) * (isH.value ? H.value * 0.36 : W * 0.36);
+  return `M ${midLine() + r0} ${a0} L ${midLine() + r0 + hPx} ${a0 + Math.min(sweepPx, (a1 - a0) * 0.7)} L ${midLine() + r0 + hPx} ${a1} L ${midLine() + r0} ${a1} Z`;
 }
 
-const isInner = (s: Shape) => ['innertube', 'enginemount', 'engineblock'].includes(s.kind);
+const isInner = (s: Shape) => ['innertube', 'enginemount', 'engineblock', 'tubecoupler', 'bulkhead', 'centeringring'].includes(s.kind);
 
 // —— 悬浮信息 ——
 const hoverTip = ref<{ x: number; y: number; text: string } | null>(null);
@@ -198,7 +151,9 @@ function onDragMove(e: MouseEvent): void {
   const d = isH.value ? e.clientX - drag.start : e.clientY - drag.start;
   const axisLen = isH.value ? W : H.value;
   const dz = (d / axisLen) / scale.value * view.value.height;
-  drag.comp.axialOffset = Math.max(0, drag.startOff + dz);
+  // 拖拽语义 = 相对父组件前端的偏移（允许负值，与官方 top 定位一致）
+  drag.comp.axialMethod = 'top';
+  drag.comp.axialOffset = drag.startOff + dz;
 }
 function onDragUp(): void {
   if (!drag) return;
@@ -278,7 +233,7 @@ const marks = computed(() => rulerMarks());
       <button :class="{ on: xray }" @click="xray = true">剖视</button>
       <button class="fit" title="复位视图（1:1 全览）" @click="resetView">⤢ 复位</button>
     </div>
-    <svg ref="svgRef" :viewBox="windowBox()" width="100%" :height="H" xmlns="http://www.w3.org/2000/svg" @wheel.prevent="onWheel">
+    <svg ref="svgRef" :viewBox="windowBox()" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" @wheel.prevent="onWheel">
       <defs>
         <pattern id="grid2d" width="16" height="16" patternUnits="userSpaceOnUse">
           <path d="M 16 0 L 0 0 0 16" fill="none" stroke="rgba(125,185,255,0.10)" stroke-width="1" />
@@ -391,14 +346,17 @@ const marks = computed(() => rulerMarks());
 <style scoped>
 .view2d {
   position: relative;
+  display: flex; flex-direction: column;
+  height: 100%;
   background: linear-gradient(180deg, #0a2b66 0%, #071a45 100%);
   border: 1px solid #123a7a;
   border-radius: var(--r-md);
   padding: 10px 12px;
-  min-height: 260px;
-  overflow: auto;
+  min-height: 0;
+  overflow: hidden;
   box-shadow: inset 0 0 40px rgba(10, 132, 255, 0.08);
 }
+.view2d svg { flex: 1; min-height: 0; }
 .xray2d {
   position: absolute; top: 10px; right: 10px; z-index: 3;
 }

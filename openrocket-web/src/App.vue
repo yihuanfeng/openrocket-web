@@ -2,6 +2,7 @@
 // 主应用：上功能区（设计/发动机配置/模拟发射 三 Tab）+ 下预览（2D/3D + 属性 + 信息条）
 import { ref, toRaw, watch, onMounted, onBeforeUnmount, computed } from 'vue';
 import { parseOrk } from './lib/orkParser';
+import { layoutRocket } from './lib/geometry';
 import { parseRkt, modelToRkt } from './lib/rktParser';
 import type { RocketComponent, RocketModel, EngineAnalysis, FlightProfile, SimConditions, DelayScanResult } from './lib/types';
 import { DEFAULT_CONDITIONS } from './lib/jsEngine';
@@ -78,16 +79,12 @@ function motorMounts(): RocketComponent[] {
 
 // —— 预览信息条（官方风格：长度/直径/质量/远地点/速度/稳定度/CG/CP）——
 function rocketLength(root: RocketComponent): number {
-  const stageLen = (s: RocketComponent) => (s.children ?? []).reduce((a, c) => a + (Number.isFinite(c.length) ? Math.max(0, c.length as number) : 0), 0);
-  const lens = (root.children ?? []).filter((c) => c.type === 'stage').map(stageLen);
-  return lens.length ? Math.max(...lens) : 0;
+  const segs = layoutRocket(root);
+  return segs.length ? Math.max(...segs.map((s) => s.z1)) : 0;
 }
 function maxDiameter(root: RocketComponent): number {
-  const maxR = (c: RocketComponent): number => Math.max(
-    Number.isFinite(c.radius) ? (c.radius as number) : 0,
-    ...(c.children ?? []).map(maxR),
-  );
-  return maxR(root) * 2;
+  const segs = layoutRocket(root);
+  return segs.length ? Math.max(...segs.map((s) => Math.max(s.r0, s.r1))) * 2 : 0;
 }
 const previewInfo = computed(() => {
   const a = analysis.value;
@@ -454,7 +451,7 @@ function addStage(): void {
   const n = model.value.root.children.filter((c) => c.type === 'stage').length + 1;
   const stage: RocketComponent = {
     type: 'stage', name: `Stage ${n}`, children: [],
-    properties: {}, length: 0, radius: 0, aftRadius: 0, axialOffset: 0, shape: '',
+    properties: {}, length: 0, radius: 0, aftRadius: 0, axialOffset: NaN, shape: '',
   };
   simProfile.value = null;
   model.value.root.children.push(stage);
@@ -648,11 +645,11 @@ function startResize(side: 'left' | 'right', e: MouseEvent): void {
 function newRocket(): void {
   const stage: RocketComponent = {
     type: 'stage', name: 'Stage 1', children: [],
-    properties: {}, length: 0, radius: 0, aftRadius: 0, axialOffset: 0, shape: '',
+    properties: {}, length: 0, radius: 0, aftRadius: 0, axialOffset: NaN, shape: '',
   };
   const root: RocketComponent = {
     type: 'rocket', name: '新火箭', children: [stage],
-    properties: {}, length: 0, radius: 0, aftRadius: 0, axialOffset: 0, shape: '',
+    properties: {}, length: 0, radius: 0, aftRadius: 0, axialOffset: NaN, shape: '',
   };
   const m: RocketModel = {
     formatVersion: '1.3', creator: 'OpenRocket Web', name: '新火箭',
@@ -674,7 +671,7 @@ function findStageOf(node: RocketComponent | null): RocketComponent {
   if (!root) {
     const fallback: RocketComponent = {
       type: 'stage', name: 'Stage 1', children: [],
-      properties: {}, length: 0, radius: 0, aftRadius: 0, axialOffset: 0, shape: '',
+      properties: {}, length: 0, radius: 0, aftRadius: 0, axialOffset: NaN, shape: '',
     };
     return fallback;
   }
@@ -1028,7 +1025,7 @@ function stabNote(): string {
     </nav>
 
     <!-- 功能区 -->
-    <section class="work-area" :style="{ height: workH + '%' }">
+    <section class="work-area" :style="{ height: `min(${workH}%, calc(100vh - 390px))` }">
       <div v-if="engineKind === 'none'" class="engine-warn">
         <b>引擎不可用</b> — {{ engineTip() }}
       </div>

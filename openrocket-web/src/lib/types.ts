@@ -15,8 +15,10 @@ export interface RocketComponent {
   radius: number;
   /** 后端半径（米） */
   aftRadius: number;
-  /** 相对父组件的轴向偏移（米） */
+  /** 相对父组件的轴向偏移（米）；NaN = 自动接续（AFTER） */
   axialOffset: number;
+  /** 轴向定位方法：top / bottom / middle / absolute / after / ''（无 axialoffset 元素=after 自动） */
+  axialMethod?: string;
   /** 形状（头锥/过渡段）：ogive / parabolic / conical / power / haack */
   shape: string;
   /** 材料密度（kg/m³，bulk 型；0/缺省 = 引擎默认材料，未解析到材料时保持默认） */
