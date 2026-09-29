@@ -385,6 +385,40 @@ function deleteConfig() {
 }
 // —— P1-5 仿真条件（风/温度/气压）——
 const simConditions = ref<SimConditions>({ ...DEFAULT_CONDITIONS });
+// —— P1-7 多配置对比：同火箭多电机并行仿真，出对比表 ——
+interface CompareRow { motorId: string; motorName: string; profile: FlightProfile; }
+const compareRows = ref<CompareRow[]>([]);
+const compareLoading = ref(false);
+watch(
+  () => simProfile.value,
+  (p) => {
+    if (!p || p.error) return;
+    const row: CompareRow = { motorId: selectedMotor.value.id, motorName: selectedMotor.value.name, profile: p };
+    const i = compareRows.value.findIndex((r) => r.motorId === row.motorId);
+    if (i >= 0) compareRows.value.splice(i, 1, row);
+    else { compareRows.value.push(row); if (compareRows.value.length > 12) compareRows.value.shift(); }
+  },
+);
+async function runCompareAll(): Promise<void> {
+  if (!model.value) return;
+  compareLoading.value = true;
+  try {
+    const eng = getEngineBridge();
+    if (eng.kind === 'none') return;
+    const all = [...MOTORS, ...customMotors.value];
+    const rows = await Promise.all(all.map(async (m) => ({ m, p: await eng.simulate(model.value as RocketModel, m, simConditions.value) })));
+    compareRows.value = rows
+      .filter((r): r is { m: MotorSpec; p: FlightProfile } => !!r.p && !r.p.error)
+      .map((r) => ({ motorId: r.m.id, motorName: r.m.name, profile: r.p }));
+  } finally {
+    compareLoading.value = false;
+  }
+}
+function selectCompareRow(row: CompareRow): void {
+  const m = [...MOTORS, ...customMotors.value].find((x) => x.id === row.motorId);
+  if (m) selectedMotor.value = m;
+  simProfile.value = row.profile;
+}
 // —— P1-6 延迟优化 ——
 const delayScan = ref<DelayScanResult | null>(null);
 const delayScanLoading = ref(false);
@@ -649,6 +683,99 @@ function onExportBy(kind: string): void {
   else if (kind === 'obj') exportObj();
 }
 
+// —— 打印 / 导出 PDF：生成打印友好页（组件清单 + 参数 + 仿真摘要），浏览器「另存为 PDF」 ——
+const TYPE_LABEL: Record<string, string> = {
+  rocket: '火箭', stage: '级', nosecone: '头锥', bodytube: '机身管', transition: '过渡段',
+  tubecoupler: '管接头', bulkhead: '隔框', centeringring: '定心环', engineblock: '发动机挡块',
+  innertube: '发动机架管', trapezoidfinset: '梯形尾翼', ellipticalfinset: '椭圆尾翼',
+  freeformfinset: '自由尾翼', parachute: '降落伞', streamer: '飘带', shockcord: '冲击绳',
+  masscomponent: '配重', launchlug: '发射导环',
+};
+const PROP_LABEL: Record<string, string> = {
+  material: '材料', surface: '表面', shape: '形状', fincount: '翼片', rootchord: '根弦',
+  tipchord: '梢弦', sweep: '后掠', height: '翼高', thickness: '厚度', motorId: '发动机',
+  diameter: '伞径', cd: '阻力系数', deployAlt: '开伞高度', cordlength: '绳长', width: '宽度',
+  mass: '质量', cant: '倾斜角', offset: '轴向位置', wallthickness: '壁厚',
+  shoulderlength: '肩长', shoulderradius: '肩半径',
+};
+function fmtLen(v: number): string {
+  return Number.isFinite(v) ? (v >= 0.001 ? `${(v * 1000).toFixed(1)} mm` : `${(v * 1e6).toFixed(0)} µm`) : '—';
+}
+function exportPdf(): void {
+  if (!model.value) return;
+  menuOpen.value = false;
+  const m = model.value;
+  const rows = collectComponents(m.root);
+  const propText = (c: RocketComponent): string => {
+    const parts: string[] = [];
+    if (c.shape) parts.push(`形状 ${c.shape}`);
+    for (const [k, v] of Object.entries(c.properties)) {
+      if (!v) continue;
+      const label = PROP_LABEL[k] ?? k;
+      parts.push(`${label} ${v}`);
+    }
+    if (c.density) parts.push(`密度 ${c.density} kg/m³`);
+    return parts.join(' · ');
+  };
+  const rowsHtml = rows.map((c, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${TYPE_LABEL[c.type] ?? c.type}</td>
+      <td>${c.name}</td>
+      <td class="num">${fmtLen(c.length)}</td>
+      <td class="num">${fmtLen(c.radius)}</td>
+      <td class="num">${fmtLen(c.aftRadius)}</td>
+      <td class="num">${fmtLen(c.axialOffset)}</td>
+      <td>${propText(c)}</td>
+    </tr>`).join('');
+  const a = analysis.value;
+  const p = simProfile.value;
+  const summaryRows = a && a.mass != null && a.cgX != null && a.cpX != null ? `
+    <tr><td>总质量</td><td class="num">${a.mass.toFixed(3)} kg</td></tr>
+    <tr><td>质心 (CG)</td><td class="num">${(a.cgX * 1000).toFixed(1)} mm</td></tr>
+    <tr><td>压心 (CP)</td><td class="num">${(a.cpX * 1000).toFixed(1)} mm</td></tr>
+    <tr><td>稳定裕度</td><td class="num">${(a.stability ?? 0).toFixed(2)} 口径</td></tr>` : '';
+  const simRows = p && !p.error ? `
+    <tr><td>最高高度</td><td class="num">${p.maxAltitude_m.toFixed(1)} m</td></tr>
+    <tr><td>最大速度</td><td class="num">${p.maxVelocity_ms.toFixed(1)} m/s</td></tr>
+    <tr><td>最大马赫</td><td class="num">${p.maxMachNumber.toFixed(3)}</td></tr>
+    <tr><td>到远地点</td><td class="num">${p.timeToApogee_s.toFixed(1)} s</td></tr>
+    <tr><td>总飞行时间</td><td class="num">${p.flightTime_s.toFixed(1)} s</td></tr>
+    <tr><td>横向风偏</td><td class="num">${p.windDrift_m.toFixed(1)} m</td></tr>` : '';
+  const html = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
+<title>${m.name} — 设计报告</title>
+<style>
+  @page { size: A4; margin: 14mm; }
+  body { font: 11px/1.5 -apple-system, "PingFang SC", sans-serif; color: #1d1d1f; margin: 0; }
+  h1 { font-size: 20px; margin: 0 0 2px; }
+  .meta { color: #6e6e73; font-size: 11px; margin-bottom: 14px; }
+  h2 { font-size: 13px; border-bottom: 1.5px solid #1d1d1f; padding-bottom: 3px; margin: 16px 0 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+  th, td { border: 0.5px solid #c7c7cc; padding: 3px 6px; text-align: left; vertical-align: top; }
+  th { background: #f5f5f7; font-weight: 600; white-space: nowrap; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; }
+  @media print { a { display: none; } }
+</style></head><body>
+<h1>${m.name}</h1>
+<div class="meta">OpenRocket Web · 生成于 ${new Date().toLocaleString('zh-CN')} · 组件 ${rows.length - 1} 个 · ${m.creator ?? 'OpenRocket Web'}</div>
+<h2>设计总览</h2>
+<table><tbody>${summaryRows}<tr><td>组件数</td><td class="num">${rows.length - 1}</td></tr></tbody></table>
+<h2>组件清单</h2>
+<table>
+  <thead><tr><th>#</th><th>类型</th><th>名称</th><th>长度</th><th>半径</th><th>后端半径</th><th>轴向偏移</th><th>参数</th></tr></thead>
+  <tbody>${rowsHtml}</tbody>
+</table>
+${p && !p.error ? `<h2>仿真结果</h2><table><tbody>${simRows}</tbody></table>` : ''}
+</body></html>`;
+  const win = window.open('', '_blank', 'width=980,height=760');
+  if (!win) return;
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => { win.print(); }, 350);
+}
+
 // —— 引擎状态 ——
 import { engineLabel, engineDiag } from './lib/engine';
 const engineKind = ref(getEngineBridge().kind);
@@ -718,6 +845,7 @@ function stabNote(): string {
           <button class="mi" :disabled="!model" @click="onExportBy('svg')">SVG 图形</button>
           <button class="mi" :disabled="!model" @click="onExportBy('csv')">CSV 组件清单</button>
           <button class="mi" :disabled="!model" @click="onExportBy('obj')">OBJ 3D 模型</button>
+          <button class="mi" :disabled="!model" @click="exportPdf">打印 / 导出 PDF</button>
         </div>
       </div>
 
@@ -825,7 +953,23 @@ function stabNote(): string {
           <div class="src">{{ analysis.detail ?? '' }}</div>
         </div>
 
-        <SimulationPanel :profile="simProfile" :loading="simLoading" :motors="[...MOTORS, ...customMotors]" :motor-id="selectedMotor.id" :conditions="simConditions" :delay-scan="delayScan" :delay-loading="delayScanLoading" @motor-change="(m: MotorSpec) => (selectedMotor = m)" @motor-import="onMotorImport" @conditions-change="(c: SimConditions) => (simConditions = c)" @optimize-delay="runOptimizeDelay" />
+        <SimulationPanel
+          :profile="simProfile"
+          :loading="simLoading"
+          :motors="[...MOTORS, ...customMotors]"
+          :motor-id="selectedMotor.id"
+          :conditions="simConditions"
+          :delay-scan="delayScan"
+          :delay-loading="delayScanLoading"
+          :compare-rows="compareRows"
+          :compare-loading="compareLoading"
+          @motor-change="(m: MotorSpec) => (selectedMotor = m)"
+          @motor-import="onMotorImport"
+          @conditions-change="(c: SimConditions) => (simConditions = c)"
+          @optimize-delay="runOptimizeDelay"
+          @compare-all="runCompareAll"
+          @select-compare="selectCompareRow"
+        />
       </section>
       <div class="resize-handle" title="拖拽调整宽度" @mousedown.prevent="startResize('right', $event)"></div>
 

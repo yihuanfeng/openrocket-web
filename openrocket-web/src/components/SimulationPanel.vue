@@ -20,15 +20,19 @@ const props = defineProps<{
   conditions: SimConditions;
   delayScan: DelayScanResult | null;
   delayLoading: boolean;
+  compareRows: Array<{ motorId: string; motorName: string; profile: FlightProfile }>;
+  compareLoading: boolean;
 }>();
 const emit = defineEmits<{
   motorChange: [m: MotorSpec];
   motorImport: [text: string];
   conditionsChange: [c: SimConditions];
   optimizeDelay: [];
+  compareAll: [];
+  selectCompare: [row: { motorId: string; motorName: string; profile: FlightProfile }];
 }>();
 
-const tab = ref<'summary' | 'alt' | 'acc' | 'replay'>('summary');
+const tab = ref<'summary' | 'alt' | 'acc' | 'replay' | 'compare'>('summary');
 const chartA = ref<HTMLDivElement | null>(null);
 const chartB = ref<HTMLDivElement | null>(null);
 let instA: ECharts | null = null;
@@ -161,6 +165,7 @@ const summaryItems = (p: FlightProfile) => [
         <button :class="['tab', { on: tab === 'alt' }]" @click="tab = 'alt'; onTab()">高度 · 速度</button>
         <button :class="['tab', { on: tab === 'acc' }]" @click="tab = 'acc'; onTab()">加速度 · 马赫</button>
         <button :class="['tab', { on: tab === 'replay' }]" @click="tab = 'replay'; onTab()">回放</button>
+        <button :class="['tab', { on: tab === 'compare' }]" @click="tab = 'compare'; onTab()">多配置对比</button>
       </div>
     </div>
 
@@ -205,6 +210,38 @@ const summaryItems = (p: FlightProfile) => [
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <div v-if="tab === 'compare'" class="compare-box">
+      <div class="opt-bar">
+        <button class="motor-import" :disabled="compareLoading" @click="emit('compareAll')">
+          {{ compareLoading ? '对比中…' : '对比全部电机（并行仿真）' }}
+        </button>
+        <span class="opt-result">{{ compareRows.length }} 个配置</span>
+      </div>
+      <div v-if="compareRows.length === 0" class="empty">运行一次仿真或点击「对比全部电机」生成多电机对比表。</div>
+      <div v-else class="delay-table compare-table">
+        <table>
+          <thead><tr><th>发动机</th><th>最高高度</th><th>最大速度</th><th>最大马赫</th><th>风偏</th><th>到远地点</th><th>总飞行</th></tr></thead>
+          <tbody>
+            <tr
+              v-for="r in compareRows"
+              :key="r.motorId"
+              :class="{ on: r.motorId === motorId }"
+              :title="'查看 ' + r.motorName + ' 的飞行曲线'"
+              @click="emit('selectCompare', r)"
+            >
+              <td class="cmp-name">{{ r.motorName }}</td>
+              <td>{{ r.profile.maxAltitude_m.toFixed(0) }} m</td>
+              <td>{{ r.profile.maxVelocity_ms.toFixed(1) }} m/s</td>
+              <td>{{ r.profile.maxMachNumber.toFixed(2) }}</td>
+              <td>{{ r.profile.windDrift_m.toFixed(0) }} m</td>
+              <td>{{ r.profile.timeToApogee_s.toFixed(1) }} s</td>
+              <td>{{ r.profile.flightTime_s.toFixed(1) }} s</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <div v-if="profile && profile.error" class="empty warn">{{ profile.error }}</div>
@@ -252,6 +289,10 @@ const summaryItems = (p: FlightProfile) => [
 .delay-table th { position: sticky; top: 0; background: var(--bg); color: var(--text-3); font-weight: 600; padding: 4px 8px; text-align: right; border-bottom: 1px solid var(--border); }
 .delay-table td { padding: 3px 8px; text-align: right; font-variant-numeric: tabular-nums; }
 .delay-table tr.best { background: var(--blue-100, #e8f2ff); font-weight: 600; }
+.compare-table { max-height: 220px; cursor: pointer; }
+.compare-table tbody tr:hover { background: var(--gray-50, #f5f6f8); }
+.compare-table tbody tr.on { background: var(--blue-100, #e8f2ff); font-weight: 600; }
+.compare-table td.cmp-name { text-align: left; font-weight: 600; }
 .sim-pane { background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 12px 14px; }
 .pane-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .pane-title { font-size: 12px; color: var(--text-2); font-weight: 600; }
