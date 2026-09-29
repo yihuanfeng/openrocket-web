@@ -551,3 +551,30 @@ Three.js 重做 3D 视图（替换 LWJGL）；导出 CSV/OBJ/SVG；优化器与�
 - **.rkt 导入**：文件菜单「打开…」accept 增 .rkt；新增 lib/rktParser.ts（轻量 XML 解析，浏览器/node 通用）。Rocksim 组件映射 16 种（NoseCone/BodyTube/Transition/FinSet/Parachute/Streamer/ShockCord/MassObject/LaunchLug/InnerTube/TubeCoupler/Bulkhead/CenteringRing/EngineBlock/EngineMount），英制换算（in→m ×0.0254、oz→kg ×0.02835），形状映射（Ogive/Conical/Parabolic/Power）
 - **RKT 导出**：菜单「导出 RKT（Rocksim）」→ RocketModel → Rocksim XML（米→英寸、kg→盎司）
 - **验证**：rktParser 单测（样例 8 组件解析换算正确 + 导出→再解析 roundtrip 一致）；CDP 实测单位切换三态、12.7cm 输入回写 127mm、菜单项存在
+
+---
+
+## 2026-09-29 第三轮：UI 全面重构（上功能区 + 下预览，对齐官方布局）
+
+### 用户拍板的新布局（按官方 basic_rocket_design）
+- **上下布局**：上方功能区（三 Tab：设计 / 发动机配置 / 模拟发射）+ 下方火箭预览
+- **设计 Tab**：左组件树 + 右组件库（每个组件有官方图标）
+- **组件/数据/素材全部用 OpenRocket 官方资源**（整理完成并全部入库验证）
+
+### 本轮完成
+1. **官方素材整理入库**（commit 4841c76）：
+   - component-icons 71 个（21 种 × large/small/dark，验证可渲染）
+   - ui-icons / event-icons / spheres / logo
+   - 16 个官方示例 .ork（**全部 16/16 验证可解析**，覆盖 20 种组件类型）
+   - thrustcurves（官方电机库）+ component-db（30 个 .orc）
+   - 整理文档 OpenRocket_官方组件与素材清单.md
+2. **布局重构**：
+   - 上功能区三 Tab：设计（左树右库）/ 发动机配置（新 MotorConfigPanel）/ 模拟发射（SimulationPanel）
+   - 下预览区：2D/3D 视图 + 右侧属性面板 + 底部官方风格信息条（长度/直径/质量/远地点/速度/CG/CP/稳定度标尺）
+   - 功能区/预览区高度可垂直拖拽（ork:workH）
+3. **组件库**：官方 4 类分区（装配/机身与尾翼/内部/质量与回收）+ 官方图标，20 项（4 项官方类型标"即将支持"）
+4. **组件树**：递归化（修复原 3 层截断，支持 Pods 4 层结构）+ 节点官方图标
+5. **官方示例接入**：文件菜单新增"OpenRocket 官方（16）"，点击直接加载官方 .ork（两级高功率 50 组件验证通过）
+
+### 验证
+- 构建通过；CDP 端到端：三 Tab 切换、组件库 20 图标全加载、树图标 6/6、2D/3D 渲染、组件添加、发动机配置面板、官方示例加载（1416mm / Ø102mm / 0.871kg / CG 1217 / CP 1562 / 稳定度 0.17）

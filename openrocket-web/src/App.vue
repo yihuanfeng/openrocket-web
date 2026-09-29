@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// 主应用：三栏布局（组件树+组件库 | 2D/3D+分析+仿真 | 属性）
-import { ref, toRaw, watch, onMounted, onBeforeUnmount } from 'vue';
+// 主应用：上功能区（设计/发动机配置/模拟发射 三 Tab）+ 下预览（2D/3D + 属性 + 信息条）
+import { ref, toRaw, watch, onMounted, onBeforeUnmount, computed } from 'vue';
 import { parseOrk } from './lib/orkParser';
 import { parseRkt, modelToRkt } from './lib/rktParser';
 import type { RocketComponent, RocketModel, EngineAnalysis, FlightProfile, SimConditions, DelayScanResult } from './lib/types';
@@ -13,8 +13,8 @@ import RocketView3D from './components/RocketView3D.vue';
 import SimulationPanel from './components/SimulationPanel.vue';
 import { MOTORS, DEFAULT_MOTOR_ID, motorById, parseEngFile } from './lib/engines';
 import type { MotorSpec } from './lib/engines';
-import AddComponentPanel from './components/AddComponentPanel.vue';
 import ComponentLibrary from './components/ComponentLibrary.vue';
+import MotorConfigPanel from './components/MotorConfigPanel.vue';
 import { makeComponent } from './lib/componentFactory';
 import { PRESETS } from './lib/presets';
 import { modelToOrkBlob } from './lib/orkSerializer';
@@ -22,6 +22,110 @@ import { modelToOrkBlob } from './lib/orkSerializer';
 const viewMode = ref<'2d' | '3d'>('2d');
 const view2dRef = ref<InstanceType<typeof RocketView2D> | null>(null);
 const view3dRef = ref<InstanceType<typeof RocketView3D> | null>(null);
+
+// —— 新布局：功能区 Tab（设计 / 发动机配置 / 模拟发射）——
+const activeTab = ref<'design' | 'motor' | 'sim'>('design');
+// 功能区高度（百分比），预览区占剩余；可垂直拖拽
+const workH = ref(Number(localStorage.getItem('ork:workH')) || 44);
+function startVResize(e: MouseEvent): void {
+  e.preventDefault();
+  const startY = e.clientY;
+  const startH = workH.value;
+  const onMove = (ev: MouseEvent) => {
+    const h = document.querySelector('.app')?.clientHeight ?? 800;
+    const pct = startH + ((ev.clientY - startY) / h) * 100;
+    workH.value = Math.min(74, Math.max(30, pct));
+  };
+  const onUp = () => {
+    window.removeEventListener('mousemove', onMove);
+    window.removeEventListener('mouseup', onUp);
+    document.body.style.cursor = '';
+    localStorage.setItem('ork:workH', String(workH.value));
+  };
+  document.body.style.cursor = 'row-resize';
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('mouseup', onUp);
+}
+
+// —— 配置重命名 / 复制（发动机配置 Tab）——
+function renameConfig(id: string, name: string): void {
+  const c = configs.value.find((x) => x.id === id);
+  if (c) { c.name = name; scheduleAutoSave(); }
+}
+function copyConfig(): void {
+  const cur = configs.value.find((c) => c.id === currentConfigId.value);
+  if (!cur) return;
+  const n = configs.value.length + 1;
+  const id = 'cfg-' + Date.now().toString(36);
+  configs.value.push({ id, name: `配置 ${n}`, motorId: cur.motorId });
+  currentConfigId.value = id;
+  scheduleAutoSave();
+}
+
+// —— 电机座列表（发动机配置 Tab）——
+function motorMounts(): RocketComponent[] {
+  const out: RocketComponent[] = [];
+  const walk = (c: RocketComponent) => {
+    if (c.type === 'innertube') out.push(c);
+    else if (c.type === 'bodytube' && c.properties?.['motormount'] === 'true') out.push(c);
+    for (const ch of c.children ?? []) walk(ch);
+  };
+  if (model.value) walk(model.value.root);
+  return out;
+}
+
+// —— 预览信息条（官方风格：长度/直径/质量/远地点/速度/稳定度/CG/CP）——
+function rocketLength(root: RocketComponent): number {
+  const stageLen = (s: RocketComponent) => (s.children ?? []).reduce((a, c) => a + (Number.isFinite(c.length) ? Math.max(0, c.length as number) : 0), 0);
+  const lens = (root.children ?? []).filter((c) => c.type === 'stage').map(stageLen);
+  return lens.length ? Math.max(...lens) : 0;
+}
+function maxDiameter(root: RocketComponent): number {
+  const maxR = (c: RocketComponent): number => Math.max(
+    Number.isFinite(c.radius) ? (c.radius as number) : 0,
+    ...(c.children ?? []).map(maxR),
+  );
+  return maxR(root) * 2;
+}
+const previewInfo = computed(() => {
+  const a = analysis.value;
+  const p = simProfile.value;
+  return {
+    length: model.value ? rocketLength(model.value.root) : 0,
+    diameter: model.value ? maxDiameter(model.value.root) : 0,
+    mass: a && a.mass != null ? a.mass : null,
+    cg: a && a.cgX != null ? a.cgX : null,
+    cp: a && a.cpX != null ? a.cpX : null,
+    stability: a && a.stability != null ? a.stability : null,
+    apogee: p && !p.error ? p.maxAltitude_m : null,
+    maxV: p && !p.error ? p.maxVelocity_ms : null,
+  };
+});
+function fmtLen2(v: number): string {
+  const u = unitMode.value;
+  if (u === 'm') return v.toFixed(3) + ' m';
+  if (u === 'cm') return (v * 100).toFixed(1) + ' cm';
+  return (v * 1000).toFixed(0) + ' mm';
+}
+function fmtMass(v: number): string {
+  return v >= 0.1 ? v.toFixed(3) + ' kg' : (v * 1000).toFixed(1) + ' g';
+}
+const TYPE_LABEL2: Record<string, string> = {
+  rocket: '火箭', stage: '级', nosecone: '头锥', bodytube: '机身管', transition: '过渡段',
+  tubecoupler: '管接头', bulkhead: '隔框', centeringring: '定心环', engineblock: '发动机挡块',
+  innertube: '内管', trapezoidfinset: '梯形尾翼', ellipticalfinset: '椭圆尾翼',
+  freeformfinset: '自由尾翼', parachute: '降落伞', streamer: '飘带', shockcord: '减震绳',
+  masscomponent: '配重', launchlug: '发射导环', railbutton: '导轨按钮', podset: '捆绑舱',
+};
+function typeLabelOf(c: RocketComponent | null): string {
+  return c ? (TYPE_LABEL2[c.type] ?? c.type) : '';
+}
+
+// 组件库添加：级走 addStage，其余 quickAdd
+function onLibAdd(type: string): void {
+  if (type === 'stage') { addStage(); return; }
+  quickAdd(type);
+}
 
 // —— P1 自动保存 / 未保存提示 / 启动恢复 ——
 const AUTO_KEY = 'ork:autosave:v1';
@@ -504,9 +608,7 @@ function onPick(e: Event): void {
 }
 
 // —— 新建 / 添加 / 示例 / 保存 ——
-const showAdd = ref(false);
 const menuOpen = ref(false);
-const toolbarOpen = ref(true);
 const fileMenuEl = ref<HTMLElement | null>(null);
 function closeMenu(e: MouseEvent): void {
   if (menuOpen.value && fileMenuEl.value && !fileMenuEl.value.contains(e.target as Node)) menuOpen.value = false;
@@ -559,7 +661,6 @@ function newRocket(): void {
   simProfile.value = null;
   analysis.value = null;
   error.value = '';
-  showAdd.value = false;
   void runAnalyze();
 }
 
@@ -594,7 +695,6 @@ function addToModel(comp: RocketComponent): void {
   simProfile.value = null;
   stage.children.push(comp);
   selected.value = comp;
-  showAdd.value = false;
   scheduleAnalyze();
   commitHistory();
 }
@@ -616,7 +716,6 @@ function loadPresetByName(name: string): void {
   simProfile.value = null;
   analysis.value = null;
   error.value = '';
-  showAdd.value = false;
   void runAnalyze();
 }
 
@@ -630,6 +729,48 @@ async function saveOrk(): Promise<void> {
   a.click();
   a.remove();
   URL.revokeObjectURL(a.href);
+}
+
+// —— 官方示例（OpenRocket 自带 16 个 .ork，素材已入库 ork-assets/examples）——
+const OFFICIAL_EXAMPLES: { zh: string; file: string }[] = [
+  { zh: '简单模型火箭', file: 'A simple model rocket' },
+  { zh: '三级低功率火箭', file: 'Three stage low power rocket' },
+  { zh: '两级高功率火箭', file: 'Two stage high power rocket' },
+  { zh: '并联助推级', file: 'Parallel booster staging' },
+  { zh: '簇式发动机', file: 'Clustered motors' },
+  { zh: '双伞回收', file: 'Dual parachute deployment' },
+  { zh: '管尾翼火箭', file: 'Tube fin rocket' },
+  { zh: '捆绑舱（翼面）', file: 'Pods--airframes and winglets' },
+  { zh: '捆绑舱（动力回收）', file: 'Pods--powered with recovery deployment' },
+  { zh: '可部署载荷', file: 'Deployable payload' },
+  { zh: '空中点火时序', file: 'Airstart timing' },
+  { zh: 'ARC 载荷火箭', file: 'ARC payload rocket' },
+  { zh: '开伞器释放', file: 'Chute release' },
+  { zh: '仿真脚本', file: 'Simulation scripting' },
+  { zh: '仿真扩展', file: 'Simulation extensions' },
+  { zh: '3D 打印头锥与尾翼', file: '3D printable nose cone and fins' },
+];
+
+async function loadOfficialExample(file: string): Promise<void> {
+  error.value = '';
+  loading.value = true;
+  menuOpen.value = false;
+  try {
+    const resp = await fetch(`/ork-assets/examples/${encodeURIComponent(file)}.ork`);
+    if (!resp.ok) throw new Error(`官方示例加载失败（HTTP ${resp.status}）`);
+    const m = await parseOrk(await resp.arrayBuffer());
+    model.value = m;
+    fileName.value = file + '.ork';
+    selected.value = m.root;
+    history.value = [deepClone(m)];
+    historyIndex.value = 0;
+    simProfile.value = null;
+    await runAnalyze();
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    loading.value = false;
+  }
 }
 
 // —— 导出 SVG / CSV / OBJ ——
@@ -843,10 +984,12 @@ function stabNote(): string {
       <button class="btn primary sm" @click="restoreAuto">恢复</button>
       <button class="btn ghost sm" @click="discardAuto">丢弃</button>
     </div>
+
+    <!-- 顶栏 -->
     <header class="topbar">
       <div class="brand">
-        <span class="logo">◈</span>
-        <span class="brand-name">OpenRocket Web</span>
+        <img class="logo" src="/ork-assets/logo/openrocket-256.png" alt="OpenRocket" />
+        <span class="brand-name">OpenRocket<span class="web">Web</span></span>
         <span v-if="model" class="doc-name">{{ model.name }}<span v-if="fileName" class="doc-file"> · {{ fileName }}</span></span>
       </div>
       <div class="tb-sep"></div>
@@ -858,8 +1001,11 @@ function stabNote(): string {
           <label class="mi file">打开…<input ref="fileInput" type="file" accept=".ork,.rkt" style="display: none" @change="onPick" /></label>
           <button class="mi" :disabled="!model" @click="saveOrk">保存 .ork</button>
           <div class="mi-sep"></div>
-          <div class="mi-head">示例设计</div>
+          <div class="mi-head">示例设计 · Web 内置</div>
           <button v-for="p in PRESETS" :key="p.name" class="mi" @click="loadPresetByName(p.name)">{{ p.name }}</button>
+          <div class="mi-sep"></div>
+          <div class="mi-head">示例设计 · OpenRocket 官方（16）</div>
+          <button v-for="o in OFFICIAL_EXAMPLES" :key="o.file" class="mi" :title="o.file + '.ork'" @click="loadOfficialExample(o.file)">{{ o.zh }}<span class="mi-en">{{ o.file }}</span></button>
           <div class="mi-sep"></div>
           <div class="mi-head">导出</div>
           <button class="mi" :disabled="!model" @click="onExportBy('svg')">SVG 图形</button>
@@ -879,65 +1025,124 @@ function stabNote(): string {
         <option value="cm">cm</option>
       </select>
       <span class="engine-tag" :title="engineTip()">{{ engineLabel() }}</span>
-      <button class="btn primary" :disabled="!model || simLoading" @click="runSimulate">{{ simLoading ? '仿真中…' : '仿真' }}</button>
-      <button class="btn onDark sm tb-toggle" :title="toolbarOpen ? '收起工具条' : '展开工具条'" @click="toolbarOpen = !toolbarOpen">{{ toolbarOpen ? '⌄' : '⌃' }}</button>
+      <button class="btn primary sim-btn" :disabled="!model || simLoading" @click="runSimulate">{{ simLoading ? '仿真中…' : '▶ 仿真' }}</button>
     </header>
 
-    <div class="toolbar" v-show="toolbarOpen">
-      <div class="tb-group">
-        <button class="btn ghost sm" :disabled="!canUndo()" title="撤销（Cmd/Ctrl+Z）" @click="undo">↶</button>
-        <button class="btn ghost sm" :disabled="!canRedo()" title="重做" @click="redo">↷</button>
-        <button class="btn ghost sm" :disabled="!model" title="添加新级（多级火箭）" @click="addStage">＋ 级</button>
-      </div>
-      <div class="tb-sep-h"></div>
-      <div class="tb-group cfg">
-        <select class="field cfg-select" :value="currentConfigId" @change="switchConfig(($event.target as HTMLSelectElement).value)" title="飞行配置">
-          <option v-for="c in configs" :key="c.id" :value="c.id">{{ c.name }}</option>
-        </select>
-        <button class="btn ghost sm" title="新建配置（复制当前发动机）" @click="newConfig">＋</button>
-        <button class="btn ghost sm" title="删除当前配置" :disabled="configs.length <= 1" @click="deleteConfig">−</button>
-      </div>
-      <div class="spacer"></div>
+    <!-- 功能区 Tab 栏 -->
+    <nav class="work-tabs">
+      <button :class="{ on: activeTab === 'design' }" @click="activeTab = 'design'">
+        <span class="tab-ic">✏</span>设计<span class="tab-en">Design</span>
+      </button>
+      <button :class="{ on: activeTab === 'motor' }" @click="activeTab = 'motor'">
+        <span class="tab-ic">⚙</span>发动机配置<span class="tab-en">Motors</span>
+      </button>
+      <button :class="{ on: activeTab === 'sim' }" @click="activeTab = 'sim'">
+        <span class="tab-ic">🚀</span>模拟发射<span class="tab-en">Flight</span>
+      </button>
       <span v-if="dirty" class="dirty-tag" title="有未落盘更改，正在自动保存">● 未保存</span>
-    </div>
+    </nav>
 
-    <div v-if="engineKind === 'none'" class="engine-warn">
-      <b>引擎不可用</b> — {{ engineTip() }}
-    </div>
+    <!-- 功能区 -->
+    <section class="work-area" :style="{ height: workH + '%' }">
+      <div v-if="engineKind === 'none'" class="engine-warn">
+        <b>引擎不可用</b> — {{ engineTip() }}
+      </div>
 
-    <main class="main">
-      <aside class="left" :style="{ width: leftW + 'px' }">
-        <section class="pane tree-pane">
+      <!-- 设计 Tab：左组件树 + 右组件库 -->
+      <template v-if="activeTab === 'design'">
+        <aside class="tree-col" :style="{ width: leftW + 'px' }">
           <div class="pane-title">
             <span>组件树</span>
             <span class="tree-ops">
               <button class="mini" :disabled="!canUndo()" title="撤销（Cmd/Ctrl+Z）" @click="undo">↶</button>
-              <button class="mini" :disabled="!canRedo()" title="重做（Cmd/Ctrl+Shift+Z / Cmd+Y）" @click="redo">↷</button>
+              <button class="mini" :disabled="!canRedo()" title="重做" @click="redo">↷</button>
               <button class="mini" :disabled="!model" title="添加新级（多级火箭）" @click="addStage">＋ 级</button>
             </span>
           </div>
           <ComponentTree v-if="model" :root="model.root" v-model="selected" :hovered="hoveredComp" @copy="copyComponent" @remove="removeComponent" @move="moveComponent" @move-to="moveToComponent" />
           <div v-else class="hint">新建或打开设计后显示</div>
-        </section>
-        <section class="pane lib-pane">
+        </aside>
+        <div class="resize-handle" title="拖拽调整宽度" @mousedown.prevent="startResize('left', $event)"></div>
+        <section class="lib-col">
           <div class="pane-title">
             <span>组件库</span>
-            <button class="mini" :disabled="!model" @click="showAdd = !showAdd">{{ showAdd ? '收起' : '自定义…' }}</button>
+            <span class="lib-count">OpenRocket 官方 · 4 类</span>
           </div>
-          <ComponentLibrary @add="quickAdd" />
+          <div class="lib-scroll">
+            <ComponentLibrary @add="onLibAdd" />
+          </div>
         </section>
-      </aside>
-      <div class="resize-handle" title="拖拽调整宽度" @mousedown.prevent="startResize('left', $event)"></div>
+      </template>
 
-      <section class="center">
-        <div class="pane canvas-pane">
-          <div class="pane-title">
-            <span>火箭视图</span>
-            <div class="seg view-seg">
-              <button :class="{ on: viewMode === '2d' }" @click="viewMode = '2d'">2D 侧视图</button>
-              <button :class="{ on: viewMode === '3d' }" @click="viewMode = '3d'">3D 视图</button>
-            </div>
+      <!-- 发动机配置 Tab -->
+      <template v-else-if="activeTab === 'motor'">
+        <MotorConfigPanel
+          :configs="configs"
+          :current-config-id="currentConfigId"
+          :motors="[...MOTORS, ...customMotors]"
+          :motor-id="selectedMotor.id"
+          :mounts="motorMounts()"
+          @switch-config="switchConfig"
+          @new-config="newConfig"
+          @delete-config="deleteConfig"
+          @rename-config="renameConfig"
+          @copy-config="copyConfig"
+          @motor-change="(m: MotorSpec) => (selectedMotor = m)"
+          @motor-import="onMotorImport"
+        />
+      </template>
+
+      <!-- 模拟发射 Tab -->
+      <template v-else>
+        <div class="sim-scroll">
+          <SimulationPanel
+            :profile="simProfile"
+            :loading="simLoading"
+            :motors="[...MOTORS, ...customMotors]"
+            :motor-id="selectedMotor.id"
+            :conditions="simConditions"
+            :delay-scan="delayScan"
+            :delay-loading="delayScanLoading"
+            :compare-rows="compareRows"
+            :compare-loading="compareLoading"
+            @motor-change="(m: MotorSpec) => (selectedMotor = m)"
+            @motor-import="onMotorImport"
+            @conditions-change="(c: SimConditions) => (simConditions = c)"
+            @optimize-delay="runOptimizeDelay"
+            @compare-all="runCompareAll"
+            @select-compare="selectCompareRow"
+          />
+        </div>
+      </template>
+    </section>
+
+    <!-- 垂直分隔条（调功能区/预览区高度） -->
+    <div class="v-resize" title="拖拽调整功能区高度" @mousedown.prevent="startVResize($event)"></div>
+
+    <!-- 预览区 -->
+    <section class="preview-area">
+      <div class="prev-head">
+        <div class="seg view-seg">
+          <button :class="{ on: viewMode === '2d' }" @click="viewMode = '2d'">2D 侧视</button>
+          <button :class="{ on: viewMode === '3d' }" @click="viewMode = '3d'">3D 视图</button>
+        </div>
+        <div class="prev-title">{{ model ? model.name : '火箭预览' }}</div>
+        <div class="prev-stab" v-if="previewInfo.stability != null" :style="{ color: stabColor() }" :title="stabNote()">
+          稳定度 {{ previewInfo.stability.toFixed(2) }} 口径
+        </div>
+        <div class="prev-scale">
+          <div class="stab-scale">
+            <div class="stab-zone z-unstable"></div>
+            <div class="stab-zone z-ok"></div>
+            <div class="stab-zone z-over"></div>
+            <span class="stab-mark m0">0</span><span class="stab-mark m1">1</span><span class="stab-mark m2">2</span><span class="stab-mark m3">3</span>
+            <span class="stab-pin" :style="{ left: stabPin() }"></span>
           </div>
+        </div>
+      </div>
+
+      <div class="prev-body">
+        <div class="canvas-wrap">
           <RocketView3D ref="view3dRef" v-if="viewMode === '3d' && model" :root="model.root" :selected="selected" :cg-x="analysis?.cgX ?? null" :cp-x="analysis?.cpX ?? null" @hover="hoveredComp = $event" @pick="selected = $event" />
           <RocketView2D ref="view2dRef" v-else-if="model" :root="model.root" :selected="selected" :unit-mode="unitMode" :cg-x="analysis?.cgX ?? null" :cp-x="analysis?.cpX ?? null" @hover="hoveredComp = $event" @pick="selected = $event" @change="onPropChanged" />
           <div v-else class="empty-state">
@@ -946,7 +1151,7 @@ function stabNote(): string {
               <button class="es-card" @click="newRocket">
                 <span class="es-icon">＋</span>
                 <span class="es-name">新建火箭</span>
-                <span class="es-desc">从空白开始，用左侧组件库搭建</span>
+                <span class="es-desc">从空白开始，用上方组件库搭建</span>
               </button>
               <button class="es-card" @click="fileInput?.click()">
                 <span class="es-icon">⇪</span>
@@ -954,60 +1159,33 @@ function stabNote(): string {
                 <span class="es-desc">加载已有的 OpenRocket 设计文件</span>
               </button>
             </div>
-            <p class="es-sub">或将 .ork 文件拖入窗口 · 也可用顶部「示例设计」快速体验</p>
+            <p class="es-sub">或将 .ork 文件拖入窗口 · 也可用顶部「文件 → 示例设计」快速体验</p>
           </div>
         </div>
-
-        <div v-if="analysis" class="pane analysis-pane">
-          <div class="pane-title">引擎分析 · {{ analysis.source }}</div>
-          <div class="metrics">
-            <div class="metric"><span class="m-label">质量</span><span class="m-val">{{ analysis.mass !== null ? analysis.mass.toFixed(3) : '—' }}<span v-if="analysis.mass !== null" class="m-unit">kg</span></span></div>
-            <div class="metric"><span class="m-label">重心 CG</span><span class="m-val">{{ analysis.cgX !== null ? analysis.cgX.toFixed(4) : '—' }}<span v-if="analysis.cgX !== null" class="m-unit">m</span></span></div>
-            <div class="metric"><span class="m-label">压心 CP</span><span class="m-val">{{ analysis.cpX !== null ? analysis.cpX.toFixed(4) : '—' }}<span v-if="analysis.cpX !== null" class="m-unit">m</span></span></div>
-            <div class="metric"><span class="m-label">静稳定度</span><span class="m-val">{{ analysis.stability !== null ? analysis.stability.toFixed(2) : '—' }}<span v-if="analysis.stability !== null" class="m-unit">口径</span></span></div>
+        <div class="resize-handle" title="拖拽调整宽度" @mousedown.prevent="startResize('right', $event)"></div>
+        <aside class="prop-col" :style="{ width: rightW + 'px' }">
+          <div class="pane-title">
+            <span>属性</span>
+            <span v-if="selected" class="prop-type">{{ typeLabelOf(selected) }}</span>
           </div>
-          <div v-if="analysis.stability !== null" class="stab-bar-wrap">
-            <div class="stab-scale">
-              <div class="stab-zone z-unstable"></div>
-              <div class="stab-zone z-ok"></div>
-              <div class="stab-zone z-over"></div>
-              <span class="stab-mark m0">0</span><span class="stab-mark m1">1</span><span class="stab-mark m2">2</span><span class="stab-mark m3">3</span>
-              <span class="stab-pin" :style="{ left: stabPin() }"></span>
-            </div>
-            <span class="stab-note" :style="{ color: stabColor() }">{{ stabNote() }}</span>
-          </div>
-          <div class="src">{{ analysis.detail ?? '' }}</div>
-        </div>
+          <PropertyPanel :component="selected" :hovered="hoveredComp" :unit-mode="unitMode" @changed="onPropChanged" @remove="removeSelected" />
+        </aside>
+      </div>
 
-        <SimulationPanel
-          :profile="simProfile"
-          :loading="simLoading"
-          :motors="[...MOTORS, ...customMotors]"
-          :motor-id="selectedMotor.id"
-          :conditions="simConditions"
-          :delay-scan="delayScan"
-          :delay-loading="delayScanLoading"
-          :compare-rows="compareRows"
-          :compare-loading="compareLoading"
-          @motor-change="(m: MotorSpec) => (selectedMotor = m)"
-          @motor-import="onMotorImport"
-          @conditions-change="(c: SimConditions) => (simConditions = c)"
-          @optimize-delay="runOptimizeDelay"
-          @compare-all="runCompareAll"
-          @select-compare="selectCompareRow"
-        />
-      </section>
-      <div class="resize-handle" title="拖拽调整宽度" @mousedown.prevent="startResize('right', $event)"></div>
-
-      <aside class="right" :style="{ width: rightW + 'px' }">
-        <div class="pane-title">属性</div>
-        <PropertyPanel :component="selected" :hovered="hoveredComp" :unit-mode="unitMode" @changed="onPropChanged" @remove="removeSelected" />
-      </aside>
-    </main>
-
-    <AddComponentPanel v-if="showAdd && model" @add="addToModel" @close="showAdd = false" />
+      <!-- 信息条（官方风格） -->
+      <div class="info-bar">
+        <div class="info-item"><span class="i-label">长度</span><span class="i-val">{{ fmtLen2(previewInfo.length) }}</span></div>
+        <div class="info-item"><span class="i-label">最大直径</span><span class="i-val">Ø {{ fmtLen2(previewInfo.diameter) }}</span></div>
+        <div class="info-item"><span class="i-label">质量</span><span class="i-val">{{ previewInfo.mass != null ? fmtMass(previewInfo.mass) : '—' }}</span></div>
+        <div class="info-item"><span class="i-label">远地点</span><span class="i-val">{{ previewInfo.apogee != null ? previewInfo.apogee.toFixed(0) + ' m' : '—' }}</span></div>
+        <div class="info-item"><span class="i-label">最大速度</span><span class="i-val">{{ previewInfo.maxV != null ? previewInfo.maxV.toFixed(1) + ' m/s' : '—' }}</span></div>
+        <div class="info-item"><span class="i-label">重心 CG</span><span class="i-val">{{ previewInfo.cg != null ? fmtLen2(previewInfo.cg) : '—' }}</span></div>
+        <div class="info-item"><span class="i-label">压心 CP</span><span class="i-val">{{ previewInfo.cp != null ? fmtLen2(previewInfo.cp) : '—' }}</span></div>
+      </div>
+    </section>
   </div>
 </template>
+
 
 <style scoped>
 /* —— Apple HIG × Figma 规范：三栏工作台 —— */
@@ -1063,24 +1241,92 @@ function stabNote(): string {
 }
 .preset.field option { color: var(--text); background: #fff; }
 
-.main { flex: 1; display: flex; min-height: 0; }
-.left {
-  flex: none; display: flex; flex-direction: column; gap: 0;
-  background: var(--panel); overflow: hidden; border-right: 1px solid var(--border);
+/* —— 新布局：上功能区（三 Tab）+ 下预览 —— */
+.work-tabs {
+  display: flex; align-items: center; gap: 4px; flex: none;
+  height: 40px; padding: 0 14px;
+  background: var(--panel); border-bottom: 1px solid var(--border);
 }
-.center { flex: 1; display: flex; flex-direction: column; gap: 0; overflow: auto; min-width: 0; }
-.right {
-  flex: none; display: flex; flex-direction: column; gap: 0;
-  background: var(--panel); overflow: auto; border-left: 1px solid var(--border);
+.work-tabs button {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  font: inherit; font-size: 13px; font-weight: 600; color: var(--text-2);
+  background: transparent; border: none; border-radius: 7px;
+  padding: 6px 14px; cursor: pointer; position: relative;
+  transition: color 0.12s, background 0.12s;
 }
+.work-tabs button:hover { color: var(--text); background: var(--gray-100); }
+.work-tabs button.on { color: var(--primary-strong); background: var(--primary-soft); }
+.work-tabs button.on::after {
+  content: ''; position: absolute; left: 14px; right: 14px; bottom: -1px;
+  height: 2px; border-radius: 1px; background: var(--primary);
+}
+.tab-ic { font-size: 12px; }
+.tab-en { font-size: 10px; color: var(--text-4, #a3aab5); font-weight: 500; letter-spacing: 0.3px; }
+.work-tabs button.on .tab-en { color: var(--blue-300); }
 
-/* 线条切分：去卡片圆角，直接分隔线 */
-.pane {
-  background: transparent; border: none; border-radius: 0; box-shadow: none;
-  padding: var(--sp-3) var(--sp-4);
+.work-area { flex: none; display: flex; min-height: 0; overflow: hidden; background: var(--bg); }
+.tree-col {
+  flex: none; display: flex; flex-direction: column; gap: 0;
+  background: var(--panel); border-right: 1px solid var(--border); overflow: hidden;
+}
+.tree-col .pane-title { padding: 10px 8px 6px 14px; margin-bottom: 0; }
+.tree-col .tree { flex: 1; min-height: 0; overflow: auto; padding: 4px 6px 10px; }
+.lib-col { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg); }
+.lib-col .pane-title { padding: 10px 8px 6px 6px; margin-bottom: 0; }
+.lib-count { font-size: 10px; color: var(--text-3); font-weight: 500; }
+.lib-scroll { flex: 1; min-height: 0; overflow: auto; padding: 4px 14px 14px; }
+.sim-scroll { flex: 1; min-width: 0; overflow: auto; padding: 14px 18px; background: var(--bg); }
+.sim-scroll .sim-pane { min-height: 100%; }
+
+/* 垂直分隔条（功能区/预览区高度） */
+.v-resize {
+  flex: none; height: 5px; cursor: row-resize; position: relative; z-index: 8;
+  background: var(--border); transition: background 0.15s ease;
+}
+.v-resize::after {
+  content: ''; position: absolute; left: 0; right: 0; top: 1px; height: 3px;
+  background: transparent; transition: background 0.15s ease;
+}
+.v-resize:hover::after, .v-resize:active::after { background: var(--primary); }
+
+/* —— 预览区 —— */
+.preview-area { flex: 1; display: flex; flex-direction: column; min-height: 0; background: var(--bg); }
+.prev-head {
+  display: flex; align-items: center; gap: 14px; flex: none;
+  height: 38px; padding: 0 14px; background: var(--panel);
   border-bottom: 1px solid var(--border);
 }
-.right .pane { border-bottom: none; }
+.prev-title { font-size: 13px; font-weight: 600; color: var(--text-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prev-stab { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.prev-scale { margin-left: auto; width: 190px; }
+.prev-scale .stab-scale { height: 8px; }
+.prev-scale .stab-mark { top: 11px; font-size: 9px; }
+.prev-scale .stab-pin { top: -3px; height: 14px; }
+
+.prev-body { flex: 1; display: flex; min-height: 0; }
+.canvas-wrap { flex: 1; min-width: 0; position: relative; overflow: hidden; }
+.prop-col {
+  flex: none; display: flex; flex-direction: column; min-height: 0;
+  background: var(--panel); border-left: 1px solid var(--border); overflow: auto;
+}
+.prop-col .pane-title { padding: 10px 12px 6px; margin-bottom: 0; }
+.prop-type { font-size: 10px; color: var(--primary-strong); font-weight: 600; }
+
+/* 信息条 */
+.info-bar {
+  flex: none; display: flex; align-items: center; gap: 0;
+  height: 34px; padding: 0 8px; background: var(--panel);
+  border-top: 1px solid var(--border);
+  overflow-x: auto; white-space: nowrap;
+}
+.info-item {
+  display: flex; align-items: baseline; gap: 6px; padding: 0 12px;
+  border-right: 1px solid var(--border); flex: none;
+}
+.info-item:last-child { border-right: none; }
+.i-label { font-size: 10px; color: var(--text-3); font-weight: 600; letter-spacing: 0.4px; }
+.i-val { font-size: 12px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+
 
 /* —— 文件菜单 —— */
 .menu { position: relative; }
@@ -1091,6 +1337,7 @@ function stabNote(): string {
   background: rgba(255, 255, 255, 0.96); backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid var(--border); border-radius: var(--r-md);
   box-shadow: var(--sh-lg); display: flex; flex-direction: column;
+  max-height: min(560px, calc(100vh - 70px)); overflow-y: auto;
 }
 .mi {
   font: inherit; font-size: var(--fs-body); color: var(--text); text-align: left;
@@ -1102,6 +1349,7 @@ function stabNote(): string {
 .mi.file { cursor: pointer; }
 .mi-sep { height: 1px; background: var(--gray-200); margin: 5px 4px; }
 .mi-head { font-size: var(--fs-caption); color: var(--text-3); font-weight: 600; padding: 6px 10px 2px; letter-spacing: 0.4px; }
+.mi-en { margin-left: auto; font-size: 10px; color: var(--text-4, #a3aab5); font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 110px; }
 
 /* —— 工具条（可折叠） —— */
 .toolbar {
@@ -1138,10 +1386,6 @@ function stabNote(): string {
 .view-seg { flex: none; }
 .cfg { flex: none; gap: 4px; }
 .cfg-select { max-width: 120px; }
-.tree-pane { flex: 0 0 42%; min-height: 150px; display: flex; flex-direction: column; }
-.tree-pane .tree { flex: 1; min-height: 0; overflow: auto; }
-.lib-pane { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
-.lib-pane .lib-scroll { flex: 1; min-height: 0; overflow: auto; }
 .mini {
   font: inherit; font-size: var(--fs-caption); font-weight: var(--fw-medium);
   color: var(--primary-strong); background: var(--primary-soft);
@@ -1151,7 +1395,6 @@ function stabNote(): string {
 .mini:disabled { opacity: 0.4; cursor: default; }
 .hint { color: var(--text-3); font-size: var(--fs-body); padding: var(--sp-2); }
 
-.canvas-pane { display: flex; flex-direction: column; padding: var(--sp-3); }
 
 .empty-state {
   flex: 1; min-height: 240px; display: flex; flex-direction: column;
