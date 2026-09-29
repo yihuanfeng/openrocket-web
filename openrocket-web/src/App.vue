@@ -939,7 +939,7 @@ function stabNote(): string {
             </div>
           </div>
           <RocketView3D ref="view3dRef" v-if="viewMode === '3d' && model" :root="model.root" :selected="selected" :cg-x="analysis?.cgX ?? null" :cp-x="analysis?.cpX ?? null" @hover="hoveredComp = $event" @pick="selected = $event" />
-          <RocketView2D ref="view2dRef" v-else-if="model" :root="model.root" :selected="selected" :cg-x="analysis?.cgX ?? null" :cp-x="analysis?.cpX ?? null" @hover="hoveredComp = $event" @pick="selected = $event" @change="onPropChanged" />
+          <RocketView2D ref="view2dRef" v-else-if="model" :root="model.root" :selected="selected" :unit-mode="unitMode" :cg-x="analysis?.cgX ?? null" :cp-x="analysis?.cpX ?? null" @hover="hoveredComp = $event" @pick="selected = $event" @change="onPropChanged" />
           <div v-else class="empty-state">
             <div class="es-title">开始设计你的火箭</div>
             <div class="es-cards">
