@@ -5,7 +5,7 @@ import type { RocketComponent } from '../lib/types';
 import { MATERIALS, TUBES, SURFACES, nearestTube } from '../lib/materials';
 import { MOTORS } from '../lib/engines';
 
-const props = defineProps<{ component: RocketComponent | null; hovered?: RocketComponent | null }>();
+const props = defineProps<{ component: RocketComponent | null; hovered?: RocketComponent | null; unitMode?: 'm' | 'mm' | 'cm' }>();
 const emit = defineEmits<{
   (e: 'changed'): void;
   (e: 'remove'): void;
@@ -102,11 +102,24 @@ const editableFields = computed<Array<[string, string, string]>>(
   () => (props.component ? EDITABLE[props.component.type] ?? [] : []),
 );
 
+// 单位制：长度类字段（内部恒存 m）按 unitMode 显示/输入
+const LEN_KEYS = new Set(['length', 'radius', 'aftRadius', 'axialOffset', 'thickness', 'wallthickness', 'shoulderlength', 'shoulderradius', 'diameter', 'width', 'cordlength', 'rootchord', 'tipchord', 'sweep', 'height', 'offset']);
+const LEN_FACTOR: Record<string, number> = { m: 1, mm: 1000, cm: 100 };
+function isLenKey(key: string): boolean { return LEN_KEYS.has(key); }
+function fmtNum(v: number, key: string): string {
+  const u = props.unitMode ?? 'mm';
+  if (isLenKey(key)) {
+    const scaled = v * (LEN_FACTOR[u] ?? 1);
+    return u === 'm' ? scaled.toFixed(4) : u === 'cm' ? scaled.toFixed(2) : scaled.toFixed(1);
+  }
+  return String(v);
+}
+
 function fieldVal(key: string): string {
   const c = props.component;
   if (!c) return '';
   const v = getNum(c, key);
-  return isNaN(v) ? '' : String(v);
+  return isNaN(v) ? '' : fmtNum(v, key);
 }
 
 function getNum(c: RocketComponent, key: string): number {
@@ -140,7 +153,8 @@ function onNumChange(key: string, e: Event): void {
   }
   const next = new Set(invalidKeys.value); next.delete(key);
   invalidKeys.value = next;
-  setNum(c, key, v);
+  const store = isLenKey(key) ? v / (LEN_FACTOR[props.unitMode ?? 'mm'] ?? 1) : v;
+  setNum(c, key, store);
   emit('changed');
 }
 
@@ -202,7 +216,7 @@ const readOnlyItems = computed<Array<[string, string]>>(() => {
                 :value="fieldVal(key)"
                 @change="onNumChange(key, $event)"
               />
-              <span v-if="unit" class="unit">{{ unit }}</span>
+              <span v-if="unit" class="unit">{{ unit === 'm' ? (props.unitMode ?? 'mm') : unit }}</span>
             </td>
           </tr>
           <tr v-if="showMaterial">

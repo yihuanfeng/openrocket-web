@@ -545,3 +545,9 @@ Three.js 重做 3D 视图（替换 LWJGL）；导出 CSV/OBJ/SVG；优化器与�
 - **PDF 打印导出**：文件菜单「打印 / 导出 PDF」——生成 A4 打印友好页（设计总览 + 全组件清单含参数 + 仿真摘要），window.print 另存 PDF
 - **撤销/重做核实**：Cmd+Z/Shift+Z/Y、复制粘贴、Delete、顶栏与树工具栏 ↶↷ 均已存在且覆盖全部编辑路径（添加/属性/删除/移动/粘贴/加级/2D 拖拽）
 - **CDP 验证**：工程级 D12-5 100.6m/35.8m/s、对比 8 行、菜单 PDF 项存在
+
+### 数据互通第二梯队（2026-09-29）：单位制 + .rkt 导入 + RKT 导出
+- **单位制切换**：顶栏 m/mm/cm 全局下拉（localStorage ork:unit 持久化，默认 mm）。长度内部恒存 m，仅显示/输入换算：LEN_KEYS 16 个长度字段 × factor（m=1/mm=1000/cm=100），属性面板数值+单位动态跟随（0.0mm ↔ 0.00cm ↔ 0.0000m），2D 悬浮信息与底部总长统一 fmtLen。输入回写换算验证：12.7cm 输入 → 内部 0.127m → 切 mm 回显 127.0
+- **.rkt 导入**：文件菜单「打开…」accept 增 .rkt；新增 lib/rktParser.ts（轻量 XML 解析，浏览器/node 通用）。Rocksim 组件映射 16 种（NoseCone/BodyTube/Transition/FinSet/Parachute/Streamer/ShockCord/MassObject/LaunchLug/InnerTube/TubeCoupler/Bulkhead/CenteringRing/EngineBlock/EngineMount），英制换算（in→m ×0.0254、oz→kg ×0.02835），形状映射（Ogive/Conical/Parabolic/Power）
+- **RKT 导出**：菜单「导出 RKT（Rocksim）」→ RocketModel → Rocksim XML（米→英寸、kg→盎司）
+- **验证**：rktParser 单测（样例 8 组件解析换算正确 + 导出→再解析 roundtrip 一致）；CDP 实测单位切换三态、12.7cm 输入回写 127mm、菜单项存在

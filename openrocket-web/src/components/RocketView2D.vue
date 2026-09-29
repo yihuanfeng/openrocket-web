@@ -3,7 +3,12 @@
 import { computed, ref } from 'vue';
 import type { RocketComponent } from '../lib/types';
 
-const props = defineProps<{ root: RocketComponent; selected?: RocketComponent | null; cgX?: number | null; cpX?: number | null }>();
+const props = defineProps<{ root: RocketComponent; selected?: RocketComponent | null; unitMode?: 'm' | 'mm' | 'cm'; cgX?: number | null; cpX?: number | null }>();
+function fmtLen(vm: number): string {
+  const u = props.unitMode ?? 'mm';
+  const scaled = vm * (u === 'm' ? 1 : u === 'cm' ? 100 : 1000);
+  return u === 'm' ? `${scaled.toFixed(3)} m` : u === 'cm' ? `${scaled.toFixed(1)} cm` : `${scaled.toFixed(0)} mm`;
+}
 const emit = defineEmits<{ hover: [c: RocketComponent | null]; pick: [c: RocketComponent]; change: [] }>();
 
 interface Shape {
@@ -138,11 +143,11 @@ function onHoverMove(e: MouseEvent, s: Shape): void {
   const len = (s.z1 - s.z0);
   const kindLabel = { nosecone: '头锥', bodytube: '机身管', transition: '过渡段', trapezoidfinset: '梯形尾翼', ellipticalfinset: '椭圆尾翼', freeformfinset: '自由尾翼', parachute: '降落伞', streamer: '飘带', shockcord: '冲击绳', masscomponent: '配重', launchlug: '发射导环', innertube: '发动机架管', tubecoupler: '管接头', bulkhead: '隔框', centeringring: '定心环', engineblock: '发动机挡块' } as Record<string, string>;
   const parts = [`${s.name}（${kindLabel[s.kind] ?? s.kind}）`];
-  if (len > 0) parts.push(`长 ${(len * 100).toFixed(1)} cm`);
+  if (len > 0) parts.push(`长 ${fmtLen(len)}`);
   const maxR = Math.max(s.r0, s.r1);
-  if (maxR > 0) parts.push(`径 ${(maxR * 200).toFixed(1)} mm`);
+  if (maxR > 0) parts.push(`径 ${fmtLen(maxR * 2)}`);
   if (s.kind === 'parachute' && s.comp.properties?.['deployAlt'] !== undefined) parts.push(`开伞 ${s.comp.properties['deployAlt'] === '0' ? '远地点' : s.comp.properties['deployAlt'] + ' m'}`);
-  if ((s.kind === 'parachute' || s.kind === 'streamer') && parseFloat(s.comp.properties?.['diameter'] ?? '0') > 0) parts.push(`伞径 ${(parseFloat(s.comp.properties['diameter'] ?? '0') * 1000).toFixed(0)} mm`);
+  if ((s.kind === 'parachute' || s.kind === 'streamer') && parseFloat(s.comp.properties?.['diameter'] ?? '0') > 0) parts.push(`伞径 ${fmtLen(parseFloat(s.comp.properties['diameter'] ?? '0'))}`);
   if (s.kind === 'innertube' && s.comp.properties?.['motorId']) parts.push(`电机 ${s.comp.properties['motorId']}`);
   hoverTip.value = { x: e.clientX - r.left, y: e.clientY - r.top, text: parts.join(' · ') };
 }
@@ -327,7 +332,7 @@ const unitLabel = computed(() => (view.value.height >= 1 ? 'm' : 'cm'));
         <circle :cx="W / 2 - 50" :cy="yAt(props.cpX)" r="4.5" fill="#ff3b30" stroke="#fff" stroke-width="1.5" />
         <text :x="W / 2 - 60" :y="yAt(props.cpX) + 4" fill="#ff8f87" font-size="11" font-weight="700" text-anchor="end">CP {{ props.cpX.toFixed(3) }} m</text>
       </g>
-      <text v-if="view.height > 0.05" :x="W / 2 + 24" :y="H - 10" fill="rgba(190,215,245,0.85)" font-size="10">总长 {{ view.height.toFixed(2) }} m · 鼻锥朝上 · 滚轮缩放 / 空白拖拽平移（×{{ scale.toFixed(1) }}）</text>
+      <text v-if="view.height > 0.05" :x="W / 2 + 24" :y="H - 10" fill="rgba(190,215,245,0.85)" font-size="10">总长 {{ fmtLen(view ? view.height : 0) }} · 鼻锥朝上 · 滚轮缩放 / 空白拖拽平移（×{{ scale.toFixed(1) }}）</text>
     </svg>
     <div v-if="hoverTip" class="hover-tip2d" :style="{ left: hoverTip.x + 14 + 'px', top: hoverTip.y + 10 + 'px' }">
       {{ hoverTip.text }}

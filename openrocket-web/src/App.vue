@@ -2,6 +2,7 @@
 // 主应用：三栏布局（组件树+组件库 | 2D/3D+分析+仿真 | 属性）
 import { ref, toRaw, watch, onMounted, onBeforeUnmount } from 'vue';
 import { parseOrk } from './lib/orkParser';
+import { parseRkt, modelToRkt } from './lib/rktParser';
 import type { RocketComponent, RocketModel, EngineAnalysis, FlightProfile, SimConditions, DelayScanResult } from './lib/types';
 import { DEFAULT_CONDITIONS } from './lib/jsEngine';
 import { getEngineBridge } from './lib/engine';
@@ -470,7 +471,8 @@ async function openFile(file: File): Promise<void> {
   analysis.value = null;
   try {
     const buf = await file.arrayBuffer();
-    const m = await parseOrk(buf);
+    const lower = file.name.toLowerCase();
+    const m = lower.endsWith('.rkt') ? parseRkt(new TextDecoder().decode(buf)) : await parseOrk(buf);
     model.value = m;
     fileName.value = file.name;
     selected.value = m.root;
@@ -776,6 +778,24 @@ ${p && !p.error ? `<h2>仿真结果</h2><table><tbody>${simRows}</tbody></table>
   setTimeout(() => { win.print(); }, 350);
 }
 
+// —— 单位制（全局：属性面板/2D 悬浮一致；长度内部恒存 m）——
+type UnitMode = 'm' | 'mm' | 'cm';
+const unitMode = ref<UnitMode>((localStorage.getItem('ork:unit') as UnitMode) || 'mm');
+watch(unitMode, (u) => localStorage.setItem('ork:unit', u));
+
+function exportRkt(): void {
+  if (!model.value) return;
+  menuOpen.value = false;
+  const xml = modelToRkt(model.value);
+  const blob = new Blob([xml], { type: 'application/xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (model.value.name || 'rocket').replace(/[\s\/\\:]+/g, '_') + '.rkt';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // —— 引擎状态 ——
 import { engineLabel, engineDiag } from './lib/engine';
 const engineKind = ref(getEngineBridge().kind);
@@ -835,7 +855,7 @@ function stabNote(): string {
         <button class="btn onDark menu-trigger" :class="{ active: menuOpen }" @click.stop="menuOpen = !menuOpen">文件 ▾</button>
         <div v-if="menuOpen" class="menu-panel">
           <button class="mi" @click="newRocket">新建</button>
-          <label class="mi file">打开…<input ref="fileInput" type="file" accept=".ork" style="display: none" @change="onPick" /></label>
+          <label class="mi file">打开…<input ref="fileInput" type="file" accept=".ork,.rkt" style="display: none" @change="onPick" /></label>
           <button class="mi" :disabled="!model" @click="saveOrk">保存 .ork</button>
           <div class="mi-sep"></div>
           <div class="mi-head">示例设计</div>
@@ -844,6 +864,7 @@ function stabNote(): string {
           <div class="mi-head">导出</div>
           <button class="mi" :disabled="!model" @click="onExportBy('svg')">SVG 图形</button>
           <button class="mi" :disabled="!model" @click="onExportBy('csv')">CSV 组件清单</button>
+          <button class="mi" :disabled="!model" @click="exportRkt">导出 RKT（Rocksim）</button>
           <button class="mi" :disabled="!model" @click="onExportBy('obj')">OBJ 3D 模型</button>
           <button class="mi" :disabled="!model" @click="exportPdf">打印 / 导出 PDF</button>
         </div>
@@ -852,6 +873,11 @@ function stabNote(): string {
       <div class="spacer"></div>
       <span v-if="loading" class="status">解析中…</span>
       <span v-if="error" class="error">错误：{{ error }}</span>
+      <select class="unit-select" :value="unitMode" @change="unitMode = ($event.target as HTMLSelectElement).value as UnitMode" title="长度单位（内部恒存米）">
+        <option value="m">m</option>
+        <option value="mm">mm</option>
+        <option value="cm">cm</option>
+      </select>
       <span class="engine-tag" :title="engineTip()">{{ engineLabel() }}</span>
       <button class="btn primary" :disabled="!model || simLoading" @click="runSimulate">{{ simLoading ? '仿真中…' : '仿真' }}</button>
       <button class="btn onDark sm tb-toggle" :title="toolbarOpen ? '收起工具条' : '展开工具条'" @click="toolbarOpen = !toolbarOpen">{{ toolbarOpen ? '⌄' : '⌃' }}</button>
@@ -975,7 +1001,7 @@ function stabNote(): string {
 
       <aside class="right" :style="{ width: rightW + 'px' }">
         <div class="pane-title">属性</div>
-        <PropertyPanel :component="selected" :hovered="hoveredComp" @changed="onPropChanged" @remove="removeSelected" />
+        <PropertyPanel :component="selected" :hovered="hoveredComp" :unit-mode="unitMode" @changed="onPropChanged" @remove="removeSelected" />
       </aside>
     </main>
 
@@ -1018,6 +1044,10 @@ function stabNote(): string {
 .spacer { flex: 1; }
 .status { font-size: var(--fs-body); color: rgba(216, 232, 255, 0.82); }
 .error { font-size: var(--fs-body); color: #ffb4ad; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.unit-select {
+  font: inherit; font-size: 12px; color: var(--text); background: var(--bg);
+  border: 1px solid var(--gray-200, #d0d0d8); border-radius: 6px; padding: 3px 6px; margin-right: 4px;
+}
 .engine-tag {
   font-size: var(--fs-caption); color: #d9ecff; background: rgba(10, 132, 255, 0.24);
   border: 1px solid rgba(125, 185, 255, 0.5); border-radius: var(--r-full); padding: 3px 12px; flex: none;
