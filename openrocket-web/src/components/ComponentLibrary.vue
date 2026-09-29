@@ -94,7 +94,11 @@ function click(item: LibItem): void {
 
 <style scoped>
 .lib { display: flex; flex-direction: column; gap: 14px; padding: 2px 4px 12px; }
-.lib-group { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.lib-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 7px;
+}
 .lib-group-title {
   grid-column: 1 / -1;
   display: flex; align-items: baseline; gap: 8px;
@@ -104,29 +108,29 @@ function click(item: LibItem): void {
 .grp-en { font-size: 10px; font-weight: 500; color: var(--text-4, #a3aab5); letter-spacing: 0.4px; }
 .lib-item {
   position: relative;
-  display: flex; flex-direction: column; align-items: center; gap: 5px; width: 100%;
+  display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%;
   background: #f8fafc; border: 1px solid #e6eaf1; border-radius: 8px;
-  padding: 9px 6px 8px; cursor: pointer; text-align: center; color: var(--text);
+  padding: 7px 4px 6px; cursor: pointer; text-align: center; color: var(--text);
   font: inherit; transition: background 0.12s, border-color 0.12s, transform 0.12s, box-shadow 0.12s;
   min-width: 0;
 }
 .lib-item:hover:not(.off) { background: #eef4fb; border-color: #7cb6f2; transform: translateY(-1px); box-shadow: 0 2px 8px rgba(10, 132, 255, 0.10); }
 .lib-item.off { opacity: 0.5; cursor: not-allowed; }
 .li-icon {
-  width: 100%; height: 50px; flex: none; display: grid; place-items: center;
+  width: 100%; height: 40px; flex: none; display: grid; place-items: center;
   background: #fff; border: 1px solid #e8ecf3; border-radius: 6px;
 }
-.li-icon img { width: 42px; height: auto; image-rendering: auto; }
+.li-icon img { width: 34px; height: auto; image-rendering: auto; }
 .lib-item:hover:not(.off) .li-icon { border-color: #cfe3fb; }
 .li-text { display: flex; flex-direction: column; align-items: center; min-width: 0; width: 100%; }
-.li-name { font-size: 12.5px; font-weight: 600; display: flex; align-items: baseline; gap: 5px; white-space: nowrap; }
-.li-en { font-size: 10px; color: var(--text-4, #a3aab5); font-weight: 500; }
-.li-desc { font-size: 10.5px; color: var(--text-3); line-height: 1.35; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.li-plus { position: absolute; top: 5px; right: 7px; color: var(--primary); font-size: 14px; opacity: 0; transition: opacity 0.12s; font-weight: 700; }
+.li-name { font-size: 11.5px; font-weight: 600; display: flex; flex-direction: column; align-items: center; gap: 1px; line-height: 1.2; white-space: nowrap; }
+.li-en { font-size: 9px; color: var(--text-4, #a3aab5); font-weight: 500; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.li-desc { font-size: 9.5px; color: var(--text-3); line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.li-plus { position: absolute; top: 4px; right: 6px; color: var(--primary); font-size: 13px; opacity: 0; transition: opacity 0.12s; font-weight: 700; }
 .lib-item:hover .li-plus { opacity: 1; }
 .li-tag {
-  position: absolute; top: 5px; right: 6px; font-size: 9.5px; color: #a3aab5; border: 1px solid #d8dce3;
-  border-radius: 4px; padding: 1px 5px; white-space: nowrap; background: #fff;
+  position: absolute; top: 4px; right: 5px; font-size: 9px; color: #a3aab5; border: 1px solid #d8dce3;
+  border-radius: 4px; padding: 0 4px; white-space: nowrap; background: #fff;
 }
 .lib-tip { font-size: 11px; color: var(--text-3); line-height: 1.5; margin: 2px 0 0; padding: 0 2px; }
 </style>
