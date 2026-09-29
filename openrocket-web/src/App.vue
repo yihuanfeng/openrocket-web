@@ -22,7 +22,11 @@ import { PRESETS } from './lib/presets';
 import { modelToOrkBlob } from './lib/orkSerializer';
 
 const viewMode = ref<'2d' | '3d'>('2d');
-const orientation = ref<'vertical' | 'horizontal'>('vertical');
+const orientation = ref<'vertical' | 'horizontal'>(localStorage.getItem('ork:orient') === 'h' ? 'horizontal' : 'vertical');
+function setOrient(o: 'vertical' | 'horizontal'): void {
+  orientation.value = o;
+  localStorage.setItem('ork:orient', o === 'horizontal' ? 'h' : 'v');
+}
 const view2dRef = ref<InstanceType<typeof RocketView2D> | null>(null);
 const view3dRef = ref<InstanceType<typeof RocketView3D> | null>(null);
 
@@ -1108,8 +1112,8 @@ function stabNote(): string {
           <button :class="{ on: viewMode === '2d' }" @click="viewMode = '2d'">2D 侧视</button>
           <button :class="{ on: viewMode === '3d' }" @click="viewMode = '3d'">3D 视图</button>
           <span class="view-sep"></span>
-          <button :class="{ on: orientation === 'vertical' }" title="火箭竖直摆放" @click="orientation = 'vertical'">竖</button>
-          <button :class="{ on: orientation === 'horizontal' }" title="火箭水平摆放" @click="orientation = 'horizontal'">横</button>
+          <button :class="{ on: orientation === 'vertical' }" title="火箭竖直摆放" @click="setOrient('vertical')">竖</button>
+          <button :class="{ on: orientation === 'horizontal' }" title="火箭水平摆放" @click="setOrient('horizontal')">横</button>
         </div>
         <div class="prev-title">{{ model ? model.name : '火箭预览' }}</div>
         <div class="prev-stab" v-if="previewInfo.stability != null" :style="{ color: stabColor() }" :title="stabNote()">
