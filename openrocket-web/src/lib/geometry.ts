@@ -96,6 +96,11 @@ export function axialPos(c: RocketComponent, innerLen: number, outerLen: number)
   }
 }
 
+/** 外形身体类组件（其半径可作为后续无半径组件的安装面，如尾翼/导环） */
+function isBodyKind(t: string): boolean {
+  return t === 'bodytube' || t === 'nosecone' || t === 'transition';
+}
+
 /** 把组件树展开为带绝对位置的段列表（z=0 鼻尖，向尾部递增） */
 export function layoutRocket(root: RocketComponent): GeoSeg[] {
   const segs: GeoSeg[] = [];
@@ -115,6 +120,8 @@ export function layoutRocket(root: RocketComponent): GeoSeg[] {
       if (isNaN(c.axialOffset)) estLen += lenOf(c);
     }
     let cursor = sBase;
+    // 前面最近的身体组件半径：无显式半径的挂件（尾翼/导环/伞）安装在其表面（官方 Finset 半径继承）
+    let prevBodyR = 0;
     for (const c of stage.children) {
       const len = lenOf(c);
       let pos: number;
@@ -125,11 +132,13 @@ export function layoutRocket(root: RocketComponent): GeoSeg[] {
       }
       const z0 = sBase + pos;
       const z1 = z0 + len;
-      const r = radiusOf(c, 0);
+      let r = radiusOf(c, 0);
+      if (!isPos(r)) r = prevBodyR; // 尾翼等挂件：继承最近身体组件半径
       const r0 = c.type === 'nosecone' ? 0 : r;
       const r1 = c.type === 'nosecone' ? radiusOf(c, 0) : r;
       // 父实体先 push（2D SVG 中父在下层，子组件叠在其上可见）
       segs.push({ kind: c.type, name: c.name, comp: c, z0, z1, r0, r1, parentZ0: sBase, parentLen: estLen, depth: 0 });
+      if (isBodyKind(c.type)) prevBodyR = r1;
       // 子组件（内部件/挂件/尾翼）：父 = 本组件，outerLen = 本组件长度
       for (const ch of c.children ?? []) {
         const clen = lenOf(ch);
