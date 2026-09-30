@@ -41,25 +41,36 @@ const view = computed(() => {
   return { height: Math.max(maxZ, 0.05) + pad * 2, maxR, pad, length: maxZ };
 });
 
-const W = 600;
-/** 竖版：轴向走 y，高度动态；横版：轴向走 x，高度扁一点 */
-const H = computed(() => (isH.value ? Math.max(300, Math.round(view.value.height * 55)) : Math.max(420, Math.round(view.value.height * 90))));
+/** 标尺区宽度（逻辑 px） */
+const RULER = 34;
+/** 像素密度：轴向全长映射为 420 逻辑像素；径向同比例 → 保持真实长径比 */
+const PX = computed(() => 420 / Math.max(view.value.height, 0.05));
+/** 逻辑宽度：横版=轴向全长；竖版=径向 + 两侧标尺/标注空间 */
+const W = computed(() => Math.round(isH.value
+  ? view.value.height * PX.value
+  : view.value.maxR * 2 * PX.value + 2 * (RULER + 72),
+));
+/** 逻辑高度：竖版=轴向全长；横版=径向 + 两侧标注空间 */
+const H = computed(() => Math.round(isH.value
+  ? view.value.maxR * 2 * PX.value + 2 * 72
+  : view.value.height * PX.value,
+));
 
 /** 轴向坐标：竖版 → y（z=0 鼻尖在顶部），横版 → x（z=0 鼻尖在左） */
 function axPos(z: number): number {
   const pad = view.value.pad;
-  if (isH.value) return (pad + z) / view.value.height * W;
+  if (isH.value) return (pad + z) / view.value.height * W.value;
   return (pad + z) / view.value.height * H.value;
 }
-/** 半径坐标（中心线单侧）：竖版 → x（中心线 W/2 向右），横版 → y（中心线 H/2 向下） */
+/** 半径坐标（中心线单侧，真实比例）：竖版 → x，横版 → y */
 function radPos(r: number): number {
-  const s = r / Math.max(view.value.maxR * 0.7, 0.001);
-  if (isH.value) return H.value / 2 + s * (H.value * 0.36);
-  return W / 2 + s * (W * 0.36);
+  const px = r * PX.value;
+  if (isH.value) return H.value / 2 + px;
+  return W.value / 2 + px;
 }
 /** 中心线坐标 */
 function midLine(): number {
-  return isH.value ? H.value / 2 : W / 2;
+  return isH.value ? H.value / 2 : W.value / 2;
 }
 
 /** 组件轮廓（中心线一侧；另一侧由镜像渲染） */
@@ -98,16 +109,16 @@ function shapePath(s: Shape): string {
   }
 }
 
-/** 尾翼（一侧梯形板，根弦 = z1-z0，高 = height） */
+/** 尾翼（一侧梯形板，根弦 = z1-z0，高 = height；径向按真实比例） */
 function finPath(s: Shape, a0: number, a1: number): string {
   const h = parseFloat(s.comp.properties['height'] ?? '') || 0.05;
   const r0 = radPos(s.r0) - midLine();
-  const hPx = (h / Math.max(view.value.maxR * 0.7, 0.001)) * (isH.value ? H.value * 0.36 : W * 0.36);
+  const hPx = h * PX.value;
   const rootc = Math.max(s.z1 - s.z0, 0.001);
   const tipc = parseFloat(s.comp.properties['tipchord'] ?? '');
   const tipcPx = (Number.isFinite(tipc) && tipc > 0 ? tipc / rootc : 1) * (a1 - a0);
   const sweep = parseFloat(s.comp.properties['sweep'] ?? '');
-  const sweepPx = (Number.isFinite(sweep) && sweep > 0 ? sweep : rootc * 0.4) / Math.max(view.value.maxR * 0.7, 0.001) * (isH.value ? H.value * 0.36 : W * 0.36);
+  const sweepPx = (Number.isFinite(sweep) && sweep > 0 ? sweep : rootc * 0.4) * PX.value;
   const tipStart = a0 + Math.min(sweepPx, (a1 - a0) * 0.7);
   const tipEnd = tipStart + tipcPx;
   // 梯形翼：翼根[根前 a0, 根后 a1]，翼尖[尖前 tipStart, 尖后 tipEnd]，高 hPx
@@ -170,7 +181,7 @@ function onShapeDown(e: MouseEvent, s: Shape): void {
 function onDragMove(e: MouseEvent): void {
   if (!drag) return;
   const d = isH.value ? e.clientX - drag.start : e.clientY - drag.start;
-  const axisLen = isH.value ? W : H.value;
+  const axisLen = isH.value ? W.value : H.value;
   const dz = (d / axisLen) / scale.value * view.value.height;
   // 拖拽语义 = 相对父组件前端的偏移（允许负值，与官方 top 定位一致）
   drag.comp.axialMethod = 'top';
@@ -191,7 +202,7 @@ const vy = ref(0);
 const MIN_S = 0.4, MAX_S = 8;
 
 function windowBox(): string {
-  return `${vx.value.toFixed(1)} ${vy.value.toFixed(1)} ${(W / scale.value).toFixed(1)} ${(H.value / scale.value).toFixed(1)}`;
+  return `${vx.value.toFixed(1)} ${vy.value.toFixed(1)} ${(W.value / scale.value).toFixed(1)} ${(H.value / scale.value).toFixed(1)}`;
 }
 function resetView(): void { scale.value = 1; vx.value = 0; vy.value = 0; }
 
@@ -200,7 +211,7 @@ function onWheel(e: WheelEvent): void {
   const svg = svgRef.value;
   if (!svg) return;
   const rect = svg.getBoundingClientRect();
-  const sx = ((e.clientX - rect.left) / rect.width) * W;
+  const sx = ((e.clientX - rect.left) / rect.width) * W.value;
   const sy = ((e.clientY - rect.top) / rect.height) * H.value;
   const vbx = vx.value + sx / scale.value;
   const vby = vy.value + sy / scale.value;
@@ -229,11 +240,10 @@ function onPanUp(): void {
 }
 
 // —— 轴向测量标尺：竖版左侧竖尺，横版底部横尺 ——
-const RULER = 34;
 function rulerMarks(): { p: number; label: string }[] {
   const h = view.value.height;
   if (h <= 0) return [];
-  const target = (38 / (isH.value ? W : H.value)) * h;
+  const target = (38 / (isH.value ? W.value : H.value)) * h;
   const mag = Math.pow(10, Math.floor(Math.log10(target)));
   const cands = [mag, 2 * mag, 5 * mag, 10 * mag];
   const step = cands.find((c) => c >= target) ?? cands[cands.length - 1];
@@ -312,7 +322,7 @@ const marks = computed(() => rulerMarks());
         <path
           v-if="!isH"
           :d="shapePath(s)"
-          transform="translate(600, 0) scale(-1, 1)"
+          :transform="'translate(' + W + ', 0) scale(-1, 1)'"
           :fill="s.kind.includes('fin') ? 'url(#finFill2d)' : isInner(s) ? 'url(#innerFill2d)' : 'url(#bodyFill2d)'"
           :opacity="xray && !isInner(s) ? 0.06 : 0.35"
           @mouseenter="emit('hover', s.comp)"
