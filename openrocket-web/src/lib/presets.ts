@@ -1,6 +1,6 @@
 // 内置示例设计：下拉选择即加载，方便快速测试（构造逻辑与「添加组件」完全同构）
 import type { RocketComponent, RocketModel } from './types';
-import { makeComponent } from './componentFactory';
+import { makeComponent, DEFAULT_PARAMS, type ComponentParams } from './componentFactory';
 
 function stage(name: string): RocketComponent {
   return {
@@ -26,6 +26,13 @@ export interface Preset {
   build: () => RocketModel;
 }
 
+// 尾翼：官方风格——根部全覆盖所在管尾端（AFTER + 负偏移，等效官方 BOTTOM 对齐管底，
+// 使尾翼压在机身管上而非悬在管后）
+function makeFin(type: string, over: ComponentParams = {}): RocketComponent {
+  const rc = over.rootChord ?? DEFAULT_PARAMS[type]?.rootChord ?? 0.06;
+  return makeComponent(type, { ...over, axialOffset: -rc, axialMethod: 'after' });
+}
+
 export const PRESETS: Preset[] = [
   {
     name: '入门小火箭（Estes 风格）',
@@ -35,8 +42,8 @@ export const PRESETS: Preset[] = [
       s.children.push(
         makeComponent('nosecone', { length: 0.12, radius: 0.02, shape: 'ogive' }),
         makeComponent('bodytube', { length: 0.3, radius: 0.02 }),
-        makeComponent('trapezoidfinset', { finCount: 3, rootChord: 0.06, tipChord: 0.04, sweep: 0.03, height: 0.05, thickness: 0.0032 }),
-        makeComponent('parachute', { axialOffset: 0.1 }),
+        makeFin('trapezoidfinset', { finCount: 3, rootChord: 0.06, tipChord: 0.04, sweep: 0.03, height: 0.05, thickness: 0.0032 }),
+        makeComponent('parachute'),
       );
       return rocketModel('入门小火箭', [s]);
     },
@@ -49,7 +56,7 @@ export const PRESETS: Preset[] = [
       s0.children.push(
         makeComponent('nosecone', { length: 0.12, radius: 0.02, shape: 'ogive' }),
         makeComponent('bodytube', { length: 0.2, radius: 0.02 }),
-        makeComponent('trapezoidfinset', { finCount: 3, rootChord: 0.05, tipChord: 0.03, sweep: 0.02, height: 0.05, thickness: 0.0032 }),
+        makeFin('trapezoidfinset', { finCount: 3, rootChord: 0.05, tipChord: 0.03, sweep: 0.02, height: 0.05, thickness: 0.0032 }),
       );
       const s1 = stage('Stage 2');
       s1.children.push(
@@ -72,9 +79,9 @@ export const PRESETS: Preset[] = [
         makeComponent('bodytube', { length: 0.32, radius: 0.035 }),
         makeComponent('transition', { length: 0.06, radius: 0.035, aftRadius: 0.026, shape: 'conical' }),
         makeComponent('bodytube', { length: 0.28, radius: 0.026 }),
-        makeComponent('trapezoidfinset', { finCount: 4, rootChord: 0.12, tipChord: 0.05, sweep: 0.04, height: 0.09, thickness: 0.0032 }),
-        makeComponent('parachute', { axialOffset: 0.05 }),
-        makeComponent('parachute', { axialOffset: 0.12 }),
+        makeFin('trapezoidfinset', { finCount: 4, rootChord: 0.12, tipChord: 0.05, sweep: 0.04, height: 0.09, thickness: 0.0032 }),
+        makeComponent('parachute'),
+        makeComponent('parachute'),
       );
       // 双伞：主伞 0.5 m CD 0.8，副伞 0.35 m CD 0.8（下降段阻力以伞为主）
       s.children[5].properties['diameter'] = '0.5';
@@ -95,7 +102,7 @@ export const PRESETS: Preset[] = [
       s0.children.push(
         nc,
         makeComponent('bodytube', { length: 0.24, radius: 0.03 }),
-        makeComponent('trapezoidfinset', { finCount: 4, rootChord: 0.1, tipChord: 0.04, sweep: 0.04, height: 0.08, thickness: 0.0032 }),
+        makeFin('trapezoidfinset', { finCount: 4, rootChord: 0.1, tipChord: 0.04, sweep: 0.04, height: 0.08, thickness: 0.0032 }),
         makeComponent('innertube', { length: 0.08, radius: 0.013 }),
       );
       s0.children[3].properties['motorId'] = 'c6-5';
@@ -103,14 +110,14 @@ export const PRESETS: Preset[] = [
       s1.children.push(
         makeComponent('transition', { length: 0.05, radius: 0.03, aftRadius: 0.024, shape: 'conical' }),
         makeComponent('bodytube', { length: 0.2, radius: 0.024 }),
-        makeComponent('ellipticalfinset', { finCount: 3, rootChord: 0.06, height: 0.05, thickness: 0.003 }),
+        makeFin('ellipticalfinset', { finCount: 3, rootChord: 0.06, height: 0.05, thickness: 0.003 }),
       );
       const s2 = stage('Stage 3');
       s2.children.push(
         makeComponent('transition', { length: 0.04, radius: 0.024, aftRadius: 0.018, shape: 'ogive' }),
         makeComponent('bodytube', { length: 0.14, radius: 0.018 }),
-        makeComponent('trapezoidfinset', { finCount: 3, rootChord: 0.04, tipChord: 0.02, sweep: 0.015, height: 0.04, thickness: 0.0025 }),
-        makeComponent('parachute', { axialOffset: 0.05 }),
+        makeFin('trapezoidfinset', { finCount: 3, rootChord: 0.04, tipChord: 0.02, sweep: 0.015, height: 0.04, thickness: 0.0025 }),
+        makeComponent('parachute'),
       );
       s2.children[3].properties['diameter'] = '0.4';
       s2.children[3].properties['cd'] = '0.8';
@@ -129,12 +136,12 @@ export const PRESETS: Preset[] = [
       bt.properties['wallthickness'] = '0.0015';
       const mt = makeComponent('innertube', { length: 0.1, radius: 0.013 });
       mt.properties['motorId'] = 'd12-5';
-      const fin = makeComponent('ellipticalfinset', { finCount: 4, rootChord: 0.1, height: 0.07, thickness: 0.0035 });
+      const fin = makeFin('ellipticalfinset', { finCount: 4, rootChord: 0.1, height: 0.07, thickness: 0.0035 });
       fin.properties['cant'] = '1.5';  // 1.5° 倾斜，减少滚转
-      const para = makeComponent('parachute', { axialOffset: 0.05 });
+      const para = makeComponent('parachute');
       para.properties['diameter'] = '0.6';
       para.properties['cd'] = '0.8';
-      const streamer = makeComponent('streamer', { length: 0.4, axialOffset: 0.16 });
+      const streamer = makeComponent('streamer', { length: 0.4 });
       streamer.properties['width'] = '0.1';
       streamer.properties['cd'] = '1.2';
       s.children.push(
@@ -161,9 +168,9 @@ export const PRESETS: Preset[] = [
       const nc = makeComponent('nosecone', { length: 0.14, radius: 0.015, shape: 'power' });
       const bt = makeComponent('bodytube', { length: 0.5, radius: 0.015 });
       bt.properties['wallthickness'] = '0.0008';
-      const fin = makeComponent('ellipticalfinset', { finCount: 3, rootChord: 0.05, height: 0.04, thickness: 0.0025 });
+      const fin = makeFin('ellipticalfinset', { finCount: 3, rootChord: 0.05, height: 0.04, thickness: 0.0025 });
       fin.properties['cant'] = '0.5';
-      const para = makeComponent('parachute', { axialOffset: 0.06 });
+      const para = makeComponent('parachute');
       para.properties['diameter'] = '0.2';
       para.properties['cd'] = '0.8';
       s.children.push(

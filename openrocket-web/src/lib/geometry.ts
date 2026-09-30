@@ -127,6 +127,8 @@ export function layoutRocket(root: RocketComponent): GeoSeg[] {
       let pos: number;
       if (isNaN(c.axialOffset)) {
         pos = cursor - sBase; // AFTER：自动接续
+      } else if ((c.axialMethod ?? '') === 'after') {
+        pos = (cursor - sBase) + c.axialOffset; // AFTER + 偏移：相对前一组件尾端（官方 previous+offset）
       } else {
         pos = axialPos(c, len, estLen);
       }
@@ -145,6 +147,8 @@ export function layoutRocket(root: RocketComponent): GeoSeg[] {
         let cpos: number;
         if (isNaN(ch.axialOffset)) {
           cpos = len; // AFTER 子组件：父尾端
+        } else if ((ch.axialMethod ?? '') === 'after') {
+          cpos = len + ch.axialOffset; // AFTER + 偏移：父尾端 + offset
         } else {
           cpos = axialPos(ch, clen, len);
         }

@@ -10,6 +10,7 @@ export interface ComponentParams {
   radius?: number;
   aftRadius?: number;
   axialOffset?: number;
+  axialMethod?: string;
   shape?: string;
   finCount?: number;
   rootChord?: number;
@@ -74,6 +75,7 @@ export function makeComponent(type: string, over: ComponentParams = {}): RocketC
     radius: 0,
     aftRadius: 0,
     axialOffset: n(p.axialOffset, NaN),
+    axialMethod: p.axialMethod,
     shape: '',
     density: Math.max(0, n(p.density, 0)),
   };
