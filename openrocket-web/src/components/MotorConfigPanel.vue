@@ -26,6 +26,25 @@ const emit = defineEmits<{
 
 const renaming = ref<string | null>(null);
 const renameText = ref('');
+// 左侧配置列表宽度（可拖拽，持久化）
+const mcpLeftW = ref(Number(localStorage.getItem('ork:mcpLeftW')) || 248);
+function startMcpResize(e: MouseEvent): void {
+  e.preventDefault();
+  const startX = e.clientX;
+  const startW = mcpLeftW.value;
+  const onMove = (ev: MouseEvent) => {
+    mcpLeftW.value = Math.min(420, Math.max(160, startW + (ev.clientX - startX)));
+  };
+  const onUp = () => {
+    window.removeEventListener('mousemove', onMove);
+    window.removeEventListener('mouseup', onUp);
+    document.body.style.cursor = '';
+    localStorage.setItem('ork:mcpLeftW', String(mcpLeftW.value));
+  };
+  document.body.style.cursor = 'col-resize';
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('mouseup', onUp);
+}
 function startRename(c: FlightConfig): void {
   renaming.value = c.id;
   renameText.value = c.name;
@@ -58,7 +77,7 @@ function classOf(m: MotorSpec): string {
 <template>
   <div class="mcp">
     <!-- 左：飞行配置列表 -->
-    <aside class="mcp-left">
+    <aside class="mcp-left" :style="{ width: mcpLeftW + 'px' }">
       <div class="mcp-head">
         <span class="mcp-title">飞行配置</span>
         <span class="mcp-sub">Flight Configurations</span>
@@ -95,6 +114,9 @@ function classOf(m: MotorSpec): string {
       </div>
       <p class="mcp-tip">配置 = 发动机选择方案；切换配置即切换仿真发动机。</p>
     </aside>
+
+    <!-- 分隔条：拖拽调整配置列表宽度 -->
+    <div class="mcp-resize" title="拖拽调整宽度" @mousedown.prevent="startMcpResize($event)"></div>
 
     <!-- 右：Motor mounts + Select motor -->
     <section class="mcp-right">
@@ -157,9 +179,18 @@ function classOf(m: MotorSpec): string {
 <style scoped>
 .mcp { display: flex; height: 100%; min-height: 0; gap: 0; }
 .mcp-left {
-  flex: none; width: 248px; border-right: 1px solid var(--border);
+  flex: none; border-right: 1px solid var(--border);
   display: flex; flex-direction: column; padding: 14px 14px 10px; min-height: 0; overflow: auto;
 }
+.mcp-resize {
+  flex: none; width: 5px; cursor: col-resize; position: relative; z-index: 8;
+  background: var(--border); transition: background 0.15s ease;
+}
+.mcp-resize::after {
+  content: ''; position: absolute; top: 0; bottom: 0; left: 1px; width: 3px;
+  background: transparent; transition: background 0.15s ease;
+}
+.mcp-resize:hover::after, .mcp-resize:active::after { background: var(--primary); }
 .mcp-right { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; padding: 14px 18px; overflow: auto; }
 .mcp-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
 .mcp-title { font-size: 15px; font-weight: 700; color: var(--text); }
