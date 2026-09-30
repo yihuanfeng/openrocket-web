@@ -167,6 +167,28 @@ function buildTris(): Tri[] {
 
 // —— 交互状态 ——
 const canvas = ref<HTMLCanvasElement | null>(null);
+// —— CG/CP 标记悬浮说明 ——
+const MARK_TIPS: Record<string, string> = {
+  CG: '重心（Center of Gravity）· 全箭质量平衡点：CP 在其后，飞行才稳定',
+  CP: '压心（Center of Pressure）· 气动合力作用点：应在 CG 之后（静稳定裕度 > 0）',
+};
+const markSpots = ref<{ x: number; y: number; kind: string; z: number }[]>([]);
+const markTip = ref<{ x: number; y: number; text: string } | null>(null);
+function onCvMove(e: MouseEvent): void {
+  const cv = canvas.value;
+  if (!cv) return;
+  const r = cv.getBoundingClientRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  let best: { x: number; y: number; kind: string; z: number } | null = null;
+  let bd = 18;
+  for (const m of markSpots.value) {
+    const d = Math.hypot(m.x - mx, m.y - my);
+    if (d < bd) { bd = d; best = m; }
+  }
+  markTip.value = best
+    ? { x: mx, y: my, text: `${best.kind} ${best.z.toFixed(3)} m · ${MARK_TIPS[best.kind]}` }
+    : null;
+}
 const lastTris: Tri[] = [];
 let ctx: CanvasRenderingContext2D | null = null;
 let rotY = 0.6;
@@ -326,10 +348,13 @@ function draw(): void {
 
   // CG / CP 位置标记（竖版侧面竖线；横版顶部垂线）
   const c = ctx;
+  const marks: { x: number; y: number; kind: string; z: number }[] = [];
   const mk = (z: number, color: string, label: string) => {
     if (!(z >= 0 && z <= maxZ)) return;
     const ax = axPos3(z);
     const perp = isH.value ? cyp - maxR.value * unit - 18 : cxp + (maxR.value * unit + 14);
+    if (isH.value) marks.push({ x: ax, y: perp, kind: label, z });
+    else marks.push({ x: perp, y: ax, kind: label, z });
     c.strokeStyle = color;
     c.lineWidth = 1.6;
     c.setLineDash([4, 3]);
@@ -370,6 +395,7 @@ function draw(): void {
   };
   if (props.cgX !== null && props.cgX !== undefined) mk(props.cgX, '#34c759', 'CG');
   if (props.cpX !== null && props.cpX !== undefined) mk(props.cpX, '#ff3b30', 'CP');
+  markSpots.value = marks;
 
   // Z 轴刻度尺（竖版中心线垂直+右侧小字；横版中心线水平+下方小字）
   c.strokeStyle = 'rgba(210,232,255,0.3)';
@@ -608,7 +634,8 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="view3d">
-    <canvas ref="canvas" class="cv" />
+    <canvas ref="canvas" class="cv" @mousemove="onCvMove" @mouseleave="markTip = null" />
+    <div v-if="markTip" class="mark-tip3d" :style="{ left: markTip.x + 14 + 'px', top: markTip.y + 10 + 'px' }">{{ markTip.text }}</div>
     <div class="xray-seg seg">
       <button :class="{ on: !xrayTarget }" @click="xrayTarget = false">实体</button>
       <button :class="{ on: xrayTarget }" @click="xrayTarget = true">剖视</button>
@@ -650,6 +677,20 @@ onBeforeUnmount(() => {
 }
 .xray-seg {
   position: absolute; top: 10px; right: 10px; z-index: 3;
+}
+.mark-tip3d {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  max-width: 280px;
+  padding: 6px 10px;
+  background: rgba(6, 20, 45, 0.94);
+  border: 1px solid #1d4a99;
+  border-radius: 4px;
+  color: #dcecff;
+  font-size: 11px;
+  line-height: 1.5;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
 }
 .view-preset {
   position: absolute; bottom: 10px; left: 10px; z-index: 3;

@@ -158,6 +158,18 @@ function onHoverMove(e: MouseEvent, s: Shape): void {
   hoverTip.value = { x: e.clientX - r.left, y: e.clientY - r.top, text: parts.join(' · ') };
 }
 function clearHoverTip(): void { hoverTip.value = null; }
+
+// —— CG / CP 标记悬浮说明 ——
+const MARK_TIPS: Record<string, string> = {
+  CG: '重心（Center of Gravity）· 全箭质量平衡点：CP 在其后，飞行才稳定',
+  CP: '压心（Center of Pressure）· 气动合力作用点：应在 CG 之后（静稳定裕度 > 0）',
+};
+function onMarkMove(e: MouseEvent, kind: 'CG' | 'CP', z: number): void {
+  const svg = svgRef.value;
+  if (!svg) return;
+  const r = svg.getBoundingClientRect();
+  hoverTip.value = { x: e.clientX - r.left, y: e.clientY - r.top, text: `${kind} ${z.toFixed(3)} m · ${MARK_TIPS[kind]}` };
+}
 const xray = ref(false);
 const svgRef = ref<SVGSVGElement | null>(null);
 
@@ -348,24 +360,24 @@ const marks = computed(() => rulerMarks());
       </g>
       <!-- CG / CP 位置标记 -->
       <template v-if="!isH">
-        <g v-if="props.cgX !== null && props.cgX !== undefined">
+        <g v-if="props.cgX !== null && props.cgX !== undefined" @mousemove="onMarkMove($event, 'CG', props.cgX)" @mouseleave="clearHoverTip">
           <line :x1="W / 2 + 14" :x2="W / 2 + 46" :y1="axPos(props.cgX)" :y2="axPos(props.cgX)" stroke="#34c759" stroke-width="1.6" stroke-dasharray="3 3" />
           <circle :cx="W / 2 + 50" :cy="axPos(props.cgX)" r="4.5" fill="#34c759" stroke="#fff" stroke-width="1.5" />
           <text :x="W / 2 + 60" :y="axPos(props.cgX) + 4" fill="#5ee08a" font-size="11" font-weight="700">CG {{ props.cgX.toFixed(3) }} m</text>
         </g>
-        <g v-if="props.cpX !== null && props.cpX !== undefined">
+        <g v-if="props.cpX !== null && props.cpX !== undefined" @mousemove="onMarkMove($event, 'CP', props.cpX)" @mouseleave="clearHoverTip">
           <line :x1="W / 2 - 14" :x2="W / 2 - 46" :y1="axPos(props.cpX)" :y2="axPos(props.cpX)" stroke="#ff3b30" stroke-width="1.6" stroke-dasharray="3 3" />
           <circle :cx="W / 2 - 50" :cy="axPos(props.cpX)" r="4.5" fill="#ff3b30" stroke="#fff" stroke-width="1.5" />
           <text :x="W / 2 - 60" :y="axPos(props.cpX) + 4" fill="#ff8f87" font-size="11" font-weight="700" text-anchor="end">CP {{ props.cpX.toFixed(3) }} m</text>
         </g>
       </template>
       <template v-else>
-        <g v-if="props.cgX !== null && props.cgX !== undefined">
+        <g v-if="props.cgX !== null && props.cgX !== undefined" @mousemove="onMarkMove($event, 'CG', props.cgX)" @mouseleave="clearHoverTip">
           <line :x1="axPos(props.cgX)" :y1="H / 2 - 14" :x2="axPos(props.cgX)" :y2="H / 2 - 46" stroke="#34c759" stroke-width="1.6" stroke-dasharray="3 3" />
           <circle :cx="axPos(props.cgX)" :cy="H / 2 - 50" r="4.5" fill="#34c759" stroke="#fff" stroke-width="1.5" />
           <text :x="axPos(props.cgX) + 6" :y="H / 2 - 56" fill="#5ee08a" font-size="11" font-weight="700">CG {{ props.cgX.toFixed(3) }} m</text>
         </g>
-        <g v-if="props.cpX !== null && props.cpX !== undefined">
+        <g v-if="props.cpX !== null && props.cpX !== undefined" @mousemove="onMarkMove($event, 'CP', props.cpX)" @mouseleave="clearHoverTip">
           <line :x1="axPos(props.cpX)" :y1="H / 2 + 14" :x2="axPos(props.cpX)" :y2="H / 2 + 46" stroke="#ff3b30" stroke-width="1.6" stroke-dasharray="3 3" />
           <circle :cx="axPos(props.cpX)" :cy="H / 2 + 50" r="4.5" fill="#ff3b30" stroke="#fff" stroke-width="1.5" />
           <text :x="axPos(props.cpX) + 6" :y="H / 2 + 60" fill="#ff8f87" font-size="11" font-weight="700">CP {{ props.cpX.toFixed(3) }} m</text>
@@ -414,6 +426,6 @@ const marks = computed(() => rulerMarks());
   position: absolute; z-index: 5; pointer-events: none;
   background: rgba(20, 26, 40, 0.92); color: #fff; font-size: 11px; line-height: 1.5;
   padding: 5px 10px; border-radius: 7px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
-  white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis;
+  max-width: 340px; overflow-wrap: break-word;
 }
 </style>
