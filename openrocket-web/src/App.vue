@@ -32,24 +32,47 @@ const view3dRef = ref<InstanceType<typeof RocketView3D> | null>(null);
 
 // —— 新布局：功能区 Tab（设计 / 发动机配置 / 模拟发射）——
 const activeTab = ref<'design' | 'motor' | 'sim'>('design');
-// 功能区高度（百分比），预览区占剩余；可垂直拖拽
+// 主布局：v=上下（功能区在上、预览在下）、h=左右（功能区在左、预览在右）
+type LayoutMode = 'v' | 'h';
+const layoutMode = ref<LayoutMode>((localStorage.getItem('ork:layout') as LayoutMode) || 'v');
+function setLayout(m: LayoutMode): void {
+  layoutMode.value = m;
+  localStorage.setItem('ork:layout', m);
+}
+// 设置面板
+const settingsOpen = ref(false);
+const settingsTab = ref<'layout'>('layout');
+
+// 功能区尺寸：上下=高度百分比，左右=宽度百分比；分隔条双模式拖拽
 const workH = ref(Number(localStorage.getItem('ork:workH')) || 44);
+const workW = ref(Number(localStorage.getItem('ork:workW')) || 48);
+const workAreaStyle = computed(() =>
+  layoutMode.value === 'h'
+    ? { width: workW.value + '%' }
+    : { height: `min(${workH.value}%, calc(100vh - 390px))` },
+);
 function startVResize(e: MouseEvent): void {
   e.preventDefault();
-  const startY = e.clientY;
-  const startH = workH.value;
+  const isH = layoutMode.value === 'h';
+  const start = isH ? e.clientX : e.clientY;
+  const startPct = isH ? workW.value : workH.value;
   const onMove = (ev: MouseEvent) => {
-    const h = document.querySelector('.app')?.clientHeight ?? 800;
-    const pct = startH + ((ev.clientY - startY) / h) * 100;
-    workH.value = Math.min(74, Math.max(30, pct));
+    const mainRow = document.querySelector('.main-row');
+    const span = isH
+      ? (mainRow?.clientWidth ?? 1200)
+      : (document.querySelector('.app')?.clientHeight ?? 800);
+    const dist = isH ? ev.clientX - start : ev.clientY - start;
+    const pct = startPct + (dist / span) * 100;
+    if (isH) workW.value = Math.min(72, Math.max(25, pct));
+    else workH.value = Math.min(74, Math.max(30, pct));
   };
   const onUp = () => {
     window.removeEventListener('mousemove', onMove);
     window.removeEventListener('mouseup', onUp);
     document.body.style.cursor = '';
-    localStorage.setItem('ork:workH', String(workH.value));
+    localStorage.setItem(isH ? 'ork:workW' : 'ork:workH', String(isH ? workW.value : workH.value));
   };
-  document.body.style.cursor = 'row-resize';
+  document.body.style.cursor = isH ? 'col-resize' : 'row-resize';
   window.addEventListener('mousemove', onMove);
   window.addEventListener('mouseup', onUp);
 }
@@ -1012,6 +1035,7 @@ function stabNote(): string {
       </select>
       <span class="engine-tag" :title="engineTip()">{{ engineLabel() }}</span>
       <button class="btn primary sim-btn" :disabled="!model || simLoading" @click="runSimulate">{{ simLoading ? '仿真中…' : '▶ 仿真' }}</button>
+      <button class="btn icon onDark settings-btn" :class="{ active: settingsOpen }" title="设置" @click="settingsOpen = !settingsOpen">⚙</button>
     </header>
 
     <!-- 功能区 Tab 栏 -->
@@ -1028,8 +1052,10 @@ function stabNote(): string {
       <span v-if="dirty" class="dirty-tag" title="有未落盘更改，正在自动保存">● 未保存</span>
     </nav>
 
+    <!-- 主行：功能区 + 分隔条 + 预览（v=上下 / h=左右） -->
+    <div class="main-row" :class="layoutMode === 'h' ? 'layout-h' : 'layout-v'">
     <!-- 功能区 -->
-    <section class="work-area" :style="{ height: `min(${workH}%, calc(100vh - 390px))` }">
+    <section class="work-area" :style="workAreaStyle">
       <div v-if="engineKind === 'none'" class="engine-warn">
         <b>引擎不可用</b> — {{ engineTip() }}
       </div>
@@ -1102,8 +1128,8 @@ function stabNote(): string {
       </template>
     </section>
 
-    <!-- 垂直分隔条（调功能区/预览区高度） -->
-    <div class="v-resize" title="拖拽调整功能区高度" @mousedown.prevent="startVResize($event)"></div>
+    <!-- 垂直分隔条（v：调功能区/预览区高度；h：调左右宽度） -->
+    <div class="v-resize" :title="layoutMode === 'h' ? '拖拽调整功能区宽度' : '拖拽调整功能区高度'" @mousedown.prevent="startVResize($event)"></div>
 
     <!-- 预览区 -->
     <section class="preview-area">
@@ -1172,6 +1198,38 @@ function stabNote(): string {
         <div class="info-item"><span class="i-label">压心 CP</span><span class="i-val">{{ previewInfo.cp != null ? fmtLen2(previewInfo.cp) : '—' }}</span></div>
       </div>
     </section>
+    </div><!-- /main-row -->
+
+    <!-- 设置面板 -->
+    <div v-if="settingsOpen" class="settings-overlay" @click.self="settingsOpen = false">
+      <div class="settings-panel">
+        <div class="settings-head">
+          <span>设置</span>
+          <button class="settings-x" title="关闭" @click="settingsOpen = false">×</button>
+        </div>
+        <div class="settings-body">
+          <aside class="settings-tabs">
+            <button :class="{ on: settingsTab === 'layout' }" @click="settingsTab = 'layout'">布局</button>
+            <button class="soon" disabled>外观<span>即将</span></button>
+          </aside>
+          <section class="settings-content">
+            <template v-if="settingsTab === 'layout'">
+              <div class="set-title">主布局</div>
+              <div class="layout-options">
+                <button class="lo" :class="{ on: layoutMode === 'v' }" @click="setLayout('v')">
+                  <span class="lo-pic v"><i class="a"></i><i class="b"></i></span>
+                  <span class="lo-txt"><b>上下布局</b><small>功能区在上，预览在下</small></span>
+                </button>
+                <button class="lo" :class="{ on: layoutMode === 'h' }" @click="setLayout('h')">
+                  <span class="lo-pic h"><i class="a"></i><i class="b"></i></span>
+                  <span class="lo-txt"><b>左右布局</b><small>功能区在左，预览在右</small></span>
+                </button>
+              </div>
+            </template>
+          </section>
+        </div>
+      </div>
+    </div>
 
     <ExamplesPanel
       :open="examplesOpen"
@@ -1261,6 +1319,87 @@ function stabNote(): string {
 .work-tabs button.on .tab-en { color: var(--blue-300); }
 
 .work-area { flex: none; display: flex; min-height: 0; overflow: hidden; background: var(--bg); }
+
+/* —— 主行：功能区 + 分隔条 + 预览；v=上下（默认），h=左右 —— */
+.main-row { display: flex; flex: 1; min-height: 0; }
+.main-row.layout-v { flex-direction: column; }
+.main-row.layout-h { flex-direction: row; }
+.main-row.layout-h .work-area { height: auto !important; min-width: 0; }
+.main-row.layout-h .v-resize {
+  width: 5px; height: auto; cursor: col-resize;
+}
+.main-row.layout-h .v-resize::after {
+  left: 1px; right: auto; top: 0; bottom: 0; width: 3px; height: auto;
+}
+.main-row.layout-h .preview-area { flex: 1; min-width: 0; }
+.main-row.layout-h .prev-body { min-width: 0; }
+.main-row.layout-h .canvas-wrap { min-width: 0; }
+
+/* 顶栏设置按钮 */
+.settings-btn { font-size: 15px; line-height: 1; padding: 6px 9px; }
+.settings-btn.active { background: rgba(255, 255, 255, 0.18); }
+
+/* —— 设置面板：左侧 tabs + 内容 —— */
+.settings-overlay {
+  position: fixed; inset: 0; z-index: 200; display: flex; align-items: flex-start; justify-content: flex-end;
+  background: rgba(8, 20, 40, 0.45); backdrop-filter: blur(2px);
+}
+.settings-panel {
+  width: 560px; max-width: 92vw; height: 380px; margin: 70px 18px 0 0;
+  display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 24px 60px rgba(6, 18, 40, 0.45);
+  overflow: hidden; animation: set-in 0.16s ease;
+}
+@keyframes set-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+.settings-head {
+  display: flex; align-items: center; justify-content: space-between; flex: none;
+  padding: 12px 16px; font-size: 14px; font-weight: 700;
+  border-bottom: 1px solid var(--border);
+}
+.settings-x {
+  width: 26px; height: 26px; border-radius: 7px; border: none; background: transparent;
+  font-size: 15px; color: var(--text-2); cursor: pointer;
+}
+.settings-x:hover { background: var(--gray-100); color: var(--text); }
+.settings-body { display: flex; flex: 1; min-height: 0; }
+.settings-tabs {
+  width: 128px; flex: none; display: flex; flex-direction: column; gap: 2px;
+  padding: 12px 8px; background: var(--bg); border-right: 1px solid var(--border);
+}
+.settings-tabs button {
+  text-align: left; font: inherit; font-size: 13px; font-weight: 600; color: var(--text-2);
+  background: transparent; border: none; border-radius: 7px; padding: 8px 12px; cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.settings-tabs button:hover { background: var(--gray-100); color: var(--text); }
+.settings-tabs button.on { background: var(--primary-soft); color: var(--primary-strong); }
+.settings-tabs button.soon { opacity: 0.45; cursor: not-allowed; }
+.settings-tabs button.soon span {
+  font-size: 9px; color: var(--text-3); border: 1px solid var(--border); border-radius: 20px; padding: 1px 6px;
+}
+.settings-content { flex: 1; min-width: 0; overflow: auto; padding: 16px 20px; }
+.set-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 10px; }
+.layout-options { display: flex; flex-direction: column; gap: 8px; }
+.lo {
+  display: flex; align-items: center; gap: 12px; text-align: left;
+  padding: 10px 12px; border-radius: 10px; cursor: pointer;
+  background: var(--bg); border: 1.5px solid var(--border); transition: border-color 0.12s, box-shadow 0.12s;
+}
+.lo:hover { border-color: var(--blue-300); }
+.lo.on { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.lo-pic {
+  width: 64px; height: 42px; flex: none; border-radius: 7px; overflow: hidden;
+  background: var(--gray-100); border: 1px solid var(--border); position: relative;
+}
+.lo-pic i { position: absolute; display: block; background: var(--primary); border-radius: 2px; }
+.lo-pic.v i.a { left: 4px; right: 4px; top: 4px; height: 13px; opacity: 0.9; }
+.lo-pic.v i.b { left: 4px; right: 4px; bottom: 4px; height: 17px; opacity: 0.55; }
+.lo-pic.h i.a { top: 4px; bottom: 4px; left: 4px; width: 26px; opacity: 0.9; }
+.lo-pic.h i.b { top: 4px; bottom: 4px; right: 4px; width: 26px; opacity: 0.55; }
+.lo-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.lo-txt b { font-size: 13px; color: var(--text); }
+.lo-txt small { font-size: 11px; color: var(--text-3); }
 .tree-col {
   flex: none; display: flex; flex-direction: column; gap: 0;
   background: var(--panel); border-right: 1px solid var(--border); overflow: hidden;
