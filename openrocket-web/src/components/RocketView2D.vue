@@ -386,7 +386,6 @@ const marks = computed(() => rulerMarks());
   height: 100%;
   background: linear-gradient(180deg, #0a2b66 0%, #071a45 100%);
   border: 1px solid #123a7a;
-  border-radius: var(--r-md);
   padding: 10px 12px;
   min-height: 0;
   overflow: hidden;

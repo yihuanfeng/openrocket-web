@@ -41,7 +41,7 @@ function setLayout(m: LayoutMode): void {
 }
 // 设置面板
 const settingsOpen = ref(false);
-const settingsTab = ref<'layout'>('layout');
+const settingsTab = ref<'layout' | 'unit'>('layout');
 
 // 功能区尺寸：上下=高度百分比，左右=宽度百分比；分隔条双模式拖拽
 const workH = ref(Number(localStorage.getItem('ork:workH')) || 44);
@@ -1028,11 +1028,6 @@ function stabNote(): string {
       <div class="spacer"></div>
       <span v-if="loading" class="status">解析中…</span>
       <span v-if="error" class="error">错误：{{ error }}</span>
-      <select class="unit-select" :value="unitMode" @change="unitMode = ($event.target as HTMLSelectElement).value as UnitMode" title="长度单位（内部恒存米）">
-        <option value="m">m</option>
-        <option value="mm">mm</option>
-        <option value="cm">cm</option>
-      </select>
       <span class="engine-tag" :title="engineTip()">{{ engineLabel() }}</span>
       <button class="btn primary sim-btn" :disabled="!model || simLoading" @click="runSimulate">{{ simLoading ? '仿真中…' : '▶ 仿真' }}</button>
       <button class="btn icon onDark settings-btn" :class="{ active: settingsOpen }" title="设置" @click="settingsOpen = !settingsOpen">⚙</button>
@@ -1210,6 +1205,7 @@ function stabNote(): string {
         <div class="settings-body">
           <aside class="settings-tabs">
             <button :class="{ on: settingsTab === 'layout' }" @click="settingsTab = 'layout'">布局</button>
+            <button :class="{ on: settingsTab === 'unit' }" @click="settingsTab = 'unit'">单位</button>
             <button class="soon" disabled>外观<span>即将</span></button>
           </aside>
           <section class="settings-content">
@@ -1225,6 +1221,15 @@ function stabNote(): string {
                   <span class="lo-txt"><b>左右布局</b><small>功能区在左，预览在右</small></span>
                 </button>
               </div>
+            </template>
+            <template v-else-if="settingsTab === 'unit'">
+              <div class="set-title">长度单位</div>
+              <div class="unit-options">
+                <button :class="{ on: unitMode === 'm' }" @click="unitMode = 'm'">米（m）</button>
+                <button :class="{ on: unitMode === 'mm' }" @click="unitMode = 'mm'">毫米（mm）</button>
+                <button :class="{ on: unitMode === 'cm' }" @click="unitMode = 'cm'">厘米（cm）</button>
+              </div>
+              <p class="set-note">内部数据恒以米存储，单位仅影响界面显示。</p>
             </template>
           </section>
         </div>
@@ -1276,10 +1281,6 @@ function stabNote(): string {
 .spacer { flex: 1; }
 .status { font-size: var(--fs-body); color: rgba(216, 232, 255, 0.82); }
 .error { font-size: var(--fs-body); color: #ffb4ad; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.unit-select {
-  font: inherit; font-size: 12px; color: var(--text); background: var(--bg);
-  border: 1px solid var(--gray-200, #d0d0d8); border-radius: 6px; padding: 3px 6px; margin-right: 4px;
-}
 .engine-tag {
   font-size: var(--fs-caption); color: #d9ecff; background: rgba(10, 132, 255, 0.24);
   border: 1px solid rgba(125, 185, 255, 0.5); border-radius: var(--r-full); padding: 3px 12px; flex: none;
@@ -1341,11 +1342,11 @@ function stabNote(): string {
 
 /* —— 设置面板：左侧 tabs + 内容 —— */
 .settings-overlay {
-  position: fixed; inset: 0; z-index: 200; display: flex; align-items: flex-start; justify-content: flex-end;
+  position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center;
   background: rgba(8, 20, 40, 0.45); backdrop-filter: blur(2px);
 }
 .settings-panel {
-  width: 560px; max-width: 92vw; height: 380px; margin: 70px 18px 0 0;
+  width: 760px; max-width: 94vw; height: 480px; max-height: 86vh;
   display: flex; flex-direction: column;
   background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
   box-shadow: 0 24px 60px rgba(6, 18, 40, 0.45);
@@ -1378,8 +1379,8 @@ function stabNote(): string {
 .settings-tabs button.soon span {
   font-size: 9px; color: var(--text-3); border: 1px solid var(--border); border-radius: 20px; padding: 1px 6px;
 }
-.settings-content { flex: 1; min-width: 0; overflow: auto; padding: 16px 20px; }
-.set-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 10px; }
+.settings-content { flex: 1; min-width: 0; overflow: auto; padding: 18px 22px; }
+.set-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 12px; }
 .layout-options { display: flex; flex-direction: column; gap: 8px; }
 .lo {
   display: flex; align-items: center; gap: 12px; text-align: left;
@@ -1400,6 +1401,15 @@ function stabNote(): string {
 .lo-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .lo-txt b { font-size: 13px; color: var(--text); }
 .lo-txt small { font-size: 11px; color: var(--text-3); }
+.unit-options { display: flex; flex-direction: column; gap: 8px; }
+.unit-options button {
+  text-align: left; font: inherit; font-size: 13px; font-weight: 600; color: var(--text-2);
+  background: var(--bg); border: 1.5px solid var(--border); border-radius: 9px;
+  padding: 10px 14px; cursor: pointer; transition: border-color 0.12s, box-shadow 0.12s;
+}
+.unit-options button:hover { border-color: var(--blue-300); }
+.unit-options button.on { border-color: var(--primary); color: var(--primary-strong); box-shadow: 0 0 0 3px var(--primary-soft); }
+.set-note { margin-top: 12px; font-size: 11px; color: var(--text-3); line-height: 1.6; }
 .tree-col {
   flex: none; display: flex; flex-direction: column; gap: 0;
   background: var(--panel); border-right: 1px solid var(--border); overflow: hidden;

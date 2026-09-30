@@ -631,7 +631,6 @@ onBeforeUnmount(() => {
   display: flex;
   background: linear-gradient(180deg, #0a2b66, #071a45);
   border: 1px solid #123a7a;
-  border-radius: var(--r-md);
   overflow: hidden;
   min-height: 0;
   height: 100%;
