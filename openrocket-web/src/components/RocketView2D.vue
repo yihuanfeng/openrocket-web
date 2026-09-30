@@ -73,6 +73,12 @@ function midLine(): number {
   return isH.value ? H.value / 2 : W.value / 2;
 }
 
+/** 点映射：(轴向 a, 径向 r) → 屏幕坐标；竖版 X=径向/Y=轴向，横版 X=轴向/Y=径向 */
+function pt(a: number, r: number): string {
+  const c = midLine() + r;
+  return isH.value ? `${a.toFixed(1)} ${c.toFixed(1)}` : `${c.toFixed(1)} ${a.toFixed(1)}`;
+}
+
 /** 组件轮廓（中心线一侧；另一侧由镜像渲染） */
 function shapePath(s: Shape): string {
   const a0 = axPos(s.z0), a1 = axPos(s.z1);
@@ -83,12 +89,12 @@ function shapePath(s: Shape): string {
       // 鼻锥：尖端在鼻端（a0），基部在后（a1，r1=基部半径）
       const shape = String(s.comp.properties?.['shape'] ?? 'ogive').toLowerCase();
       if (shape === 'conical') {
-        return `M ${mid} ${a0} L ${mid + r1} ${a1} L ${mid} ${a1} Z`;
+        return `M ${pt(a0, 0)} L ${pt(a1, r1)} L ${pt(a1, 0)} Z`;
       }
-      return `M ${mid} ${a0} Q ${mid + r1 * 0.55} ${(a0 + a1) / 2} ${mid + r1} ${a1} L ${mid} ${a1} Z`;
+      return `M ${pt(a0, 0)} Q ${pt((a0 + a1) / 2, r1 * 0.55)} ${pt(a1, r1)} L ${pt(a1, 0)} Z`;
     }
     case 'transition':
-      return `M ${mid} ${a0} L ${mid + r0} ${a0} L ${mid + r1} ${a1} L ${mid} ${a1} Z`;
+      return `M ${pt(a0, 0)} L ${pt(a0, r0)} L ${pt(a1, r1)} L ${pt(a1, 0)} Z`;
     case 'finset':
     case 'fintab':
     case 'trapezoidfinset':
@@ -97,15 +103,15 @@ function shapePath(s: Shape): string {
       return finPath(s, a0, a1);
     case 'launchlug':
     case 'railbutton':
-      return `M ${mid + r0} ${a0} L ${mid + r0} ${a1} L ${mid + r0 * 1.6} ${(a0 + a1) / 2} Z`;
+      return `M ${pt(a0, r0)} L ${pt(a1, r0)} L ${pt((a0 + a1) / 2, r0 * 1.6)} Z`;
     case 'tubefinset':
       return tubeFinPath(s, a0, a1);
     case 'parachute':
     case 'streamer':
       // 收纳伞包：小型伞形
-      return `M ${mid} ${a0} L ${mid + r0} ${a0} L ${mid + r1 * 1.4} ${(a0 + a1) / 2} L ${mid + r0} ${a1} L ${mid} ${a1} Z`;
+      return `M ${pt(a0, 0)} L ${pt(a0, r0)} L ${pt((a0 + a1) / 2, r1 * 1.4)} L ${pt(a1, r0)} L ${pt(a1, 0)} Z`;
     default:
-      return `M ${mid} ${a0} L ${mid + r0} ${a0} L ${mid + r1} ${a1} L ${mid} ${a1} Z`;
+      return `M ${pt(a0, 0)} L ${pt(a0, r0)} L ${pt(a1, r1)} L ${pt(a1, 0)} Z`;
   }
 }
 
@@ -122,15 +128,14 @@ function finPath(s: Shape, a0: number, a1: number): string {
   const tipStart = a0 + Math.min(sweepPx, (a1 - a0) * 0.7);
   const tipEnd = tipStart + tipcPx;
   // 梯形翼：翼根[根前 a0, 根后 a1]，翼尖[尖前 tipStart, 尖后 tipEnd]，高 hPx
-  return `M ${midLine() + r0} ${a0} L ${midLine() + r0 + hPx} ${tipStart} L ${midLine() + r0 + hPx} ${Math.min(tipEnd, a1)} L ${midLine() + r0} ${a1} Z`;
+  return `M ${pt(a0, r0)} L ${pt(tipStart, r0 + hPx)} L ${pt(Math.min(tipEnd, a1), r0 + hPx)} L ${pt(a1, r0)} Z`;
 }
 
 /** 管翼（侧视：上下两根小管轮廓，代表环绕管组） */
 function tubeFinPath(s: Shape, a0: number, a1: number): string {
-  const mid = midLine();
-  const tR = radPos(s.r1) - mid; // 小管半径 px
-  const outer = radPos(s.r1 * 2) - mid; // 管中心 ≈ bodyR + tubeR（6 管相切）
-  return `M ${mid + outer - tR} ${a0} L ${mid + outer - tR} ${a1} L ${mid + outer + tR} ${a1} L ${mid + outer + tR} ${a0} Z`;
+  const tR = radPos(s.r1) - midLine(); // 小管半径 px
+  const outer = radPos(s.r1 * 2) - midLine(); // 管中心 ≈ bodyR + tubeR（6 管相切）
+  return `M ${pt(a0, outer - tR)} L ${pt(a1, outer - tR)} L ${pt(a1, outer + tR)} L ${pt(a0, outer + tR)} Z`;
 }
 
 const isInner = (s: Shape) => ['innertube', 'enginemount', 'engineblock', 'tubecoupler', 'bulkhead', 'centeringring'].includes(s.kind);
