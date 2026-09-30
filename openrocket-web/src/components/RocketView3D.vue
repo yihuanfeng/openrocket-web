@@ -34,6 +34,7 @@ interface Tri {
   color: string;
   selected: boolean;
   cls: 'outer' | 'inner' | 'fin';
+  kind: string;
   comp: RocketComponent;
 }
 
@@ -74,12 +75,79 @@ function triColor(seg: Seg, light: number): string {
   return `rgb(${ch3(ca, cb, t).join(',')})`;
 }
 
+// —— 程序化表面材质（半透明纹理叠加在光照色上，保留明暗与部件主色）——
+const PAT_DEFS: Record<string, (c: CanvasRenderingContext2D, s: number) => void> = {
+  // 碳纤维：45° 斜纹编织（白高光 + 黑阴影线）
+  carbon(c, s) {
+    c.strokeStyle = 'rgba(255,255,255,0.22)';
+    c.lineWidth = 1;
+    for (let i = -s; i < s * 2; i += 7) { c.beginPath(); c.moveTo(i, 0); c.lineTo(i + s, s); c.stroke(); }
+    c.strokeStyle = 'rgba(0,0,0,0.30)';
+    for (let i = -s; i < s * 2; i += 7) { c.beginPath(); c.moveTo(i + 3.5, 0); c.lineTo(i + 3.5 + s, s); c.stroke(); }
+  },
+  // 金属拉丝：细水平磨砂线
+  brushed(c, s) {
+    for (let y = 0; y < s; y += 3) {
+      c.fillStyle = y % 6 === 0 ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)';
+      c.fillRect(0, y, s, 2);
+    }
+  },
+  // 布料：经纬细网格
+  fabric(c, s) {
+    c.strokeStyle = 'rgba(255,255,255,0.28)';
+    c.lineWidth = 1;
+    for (let i = 0; i <= s; i += 8) {
+      c.beginPath(); c.moveTo(i, 0); c.lineTo(i, s); c.stroke();
+      c.beginPath(); c.moveTo(0, i); c.lineTo(s, i); c.stroke();
+    }
+  },
+  // 玻纤光泽：横向高光带（模拟曲面反射）
+  gloss(c, s) {
+    const g = c.createLinearGradient(0, 0, s, 0);
+    g.addColorStop(0, 'rgba(255,255,255,0)');
+    g.addColorStop(0.32, 'rgba(255,255,255,0.34)');
+    g.addColorStop(0.5, 'rgba(255,255,255,0)');
+    c.fillStyle = g;
+    c.fillRect(0, 0, s, s);
+  },
+};
+// 部件 → 材质 + 叠加透明度
+const MAT_MAP: Record<string, { pat?: string; a: number }> = {
+  nosecone: { pat: 'gloss', a: 0.5 },
+  bodytube: { pat: 'carbon', a: 0.34 },
+  transition: { pat: 'brushed', a: 0.32 },
+  trapezoidfinset: { pat: 'carbon', a: 0.26 },
+  ellipticalfinset: { pat: 'carbon', a: 0.26 },
+  finset: { pat: 'carbon', a: 0.26 },
+  parachute: { pat: 'fabric', a: 0.5 },
+  streamer: { pat: 'fabric', a: 0.5 },
+  innertube: { pat: 'brushed', a: 0.2 },
+  enginemount: { pat: 'brushed', a: 0.2 },
+  engineblock: { pat: 'brushed', a: 0.2 },
+};
+const patCache = new Map<string, CanvasPattern | null>();
+function getPat(kind: string, ctx: CanvasRenderingContext2D): CanvasPattern | null {
+  const mat = MAT_MAP[kind];
+  if (!mat?.pat) return null;
+  const key = mat.pat;
+  if (patCache.has(key)) return patCache.get(key) ?? null;
+  const cv = document.createElement('canvas');
+  cv.width = 64;
+  cv.height = 64;
+  const c2 = cv.getContext('2d');
+  if (!c2) { patCache.set(key, null); return null; }
+  PAT_DEFS[key]?.(c2, 64);
+  const p = ctx.createPattern(cv, 'repeat');
+  patCache.set(key, p);
+  return p;
+}
+
 function buildTris(): Tri[] {
   const tris: Tri[] = [];
   const addQuad = (a: number[], b: number[], c: number[], d: number[], seg: Seg, light: number, sel: boolean) => {
     const cls = clsOf(seg.kind);
-    tris.push({ pts: [a, b, c], depth: 0, color: triColor(seg, light), selected: sel, cls, comp: seg.comp });
-    tris.push({ pts: [a, c, d], depth: 0, color: triColor(seg, light * 0.96), selected: sel, cls, comp: seg.comp });
+    tris.push({ pts: [a, b, c], depth: 0, color: triColor(seg, light), selected: sel, cls, kind: seg.kind, comp: seg.comp });
+    tris.push({ pts: [a, c, d], depth: 0, color: triColor(seg, light * 0.96), selected: sel, cls, kind: seg.kind, comp: seg.comp });
   };
   const segAdd = (s: Seg, z0: number, z1: number, r0: number, r1: number, cx = 0, cy = 0) => {
     const steps = s.kind === 'nosecone' ? 6 : 2;
@@ -330,7 +398,19 @@ function draw(): void {
       ctx.lineWidth = 1.2;
       ctx.stroke();
     } else {
-      ctx.fill();
+      const mat = xt <= 0.01 ? getPat(t.kind, ctx) : null;
+      if (mat) {
+        // 材质纹理叠加：先光照色打底，再半透明纹理（保留明暗与部件主色）
+        ctx.fillStyle = t.color;
+        ctx.fill();
+        ctx.globalAlpha = MAT_MAP[t.kind]?.a ?? 0.3;
+        ctx.fillStyle = mat;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      } else {
+        ctx.fillStyle = t.color;
+        ctx.fill();
+      }
       if (t.selected) {
         ctx.strokeStyle = '#ff9f0a';
         ctx.lineWidth = 2;
