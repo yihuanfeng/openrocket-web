@@ -27,12 +27,13 @@
 │   ├── src/components/                # UI 组件
 │   ├── public/ork-assets/             # 官方素材（示例 .ork 16 个、缩略图、组件库 .orc、logo、wasm）
 │   └── scripts/gen-thumbs.ts          # 缩略图批量生成脚本
-├── phase0-poc/                        # WASM 可行性 PoC（仅保留源码；wasm 产物已入库 public/wasm/）
+├── docs/                              # 项目文档（重构规划、WASM 可行性报告、素材清单）
+├── README.md                          # 项目介绍与快速开始
 ├── .github/workflows/deploy.yml       # GitHub Pages 自动部署
 └── agents.md                          # 本文件
 ```
 
-> 仓库瘦身说明（2026-10-03）：已删除官方 Java 源码 `openrocket/`（约 745M，素材已全部入库 `public/ork-assets/`，需要时从 https://github.com/openrocket/openrocket 重新 clone）、WASM 实验工具链 `tools/`（JDK/Maven，约 479M，本地 Java 方案已弃用）、`node_modules/` 与 `dist/`（可分别用 `npm ci` / `npm run build` 重建）。仓库总体积 1.4G → 21M。
+> 仓库瘦身说明（2026-10-03）：已删除官方 Java 源码 `openrocket/`（约 745M，素材已全部入库 `public/ork-assets/`，需要时从 https://github.com/openrocket/openrocket 重新 clone）、WASM 实验工具链 `tools/`（JDK/Maven，约 479M，本地 Java 方案已弃用）、WASM 可行性 PoC `phase0-poc/`（编译产物已入库 `public/wasm/`）、`node_modules/` 与 `dist/`（可分别用 `npm ci` / `npm run build` 重建）。仓库总体积 1.4G → 21M → 12M。
 
 ## 3. 前端架构要点（改代码前必读）
 
