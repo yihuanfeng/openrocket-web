@@ -39,11 +39,12 @@ export const PRESETS: Preset[] = [
     desc: '头锥 + 机身 + 3 片尾翼 + 降落伞',
     build: () => {
       const s = stage('Stage 1');
+      const bt = makeComponent('bodytube', { length: 0.3, radius: 0.02 });
+      bt.children.push(makeComponent('parachute', { axialOffset: 0.08 })); // 回收舱：机身管内前段
       s.children.push(
         makeComponent('nosecone', { length: 0.12, radius: 0.02, shape: 'ogive' }),
-        makeComponent('bodytube', { length: 0.3, radius: 0.02 }),
+        bt,
         makeFin('trapezoidfinset', { finCount: 3, rootChord: 0.06, tipChord: 0.04, sweep: 0.03, height: 0.05, thickness: 0.0032 }),
-        makeComponent('parachute'),
       );
       return rocketModel('入门小火箭', [s]);
     },
@@ -74,20 +75,22 @@ export const PRESETS: Preset[] = [
       const nc = makeComponent('nosecone', { length: 0.18, radius: 0.035, shape: 'ogive' });
       nc.properties['shoulderlength'] = '0.04';
       nc.properties['shoulderradius'] = '0.033';
+      const bt1 = makeComponent('bodytube', { length: 0.32, radius: 0.035 });
+      // 双伞（回收舱）：主伞 0.5 m / 副伞 0.35 m，位于前机身管内前段
+      const chute1 = makeComponent('parachute', { axialOffset: 0.06 });
+      chute1.properties['diameter'] = '0.5';
+      chute1.properties['cd'] = '0.8';
+      const chute2 = makeComponent('parachute', { axialOffset: 0.16 });
+      chute2.properties['diameter'] = '0.35';
+      chute2.properties['cd'] = '0.8';
+      bt1.children.push(chute1, chute2);
       s.children.push(
         nc,
-        makeComponent('bodytube', { length: 0.32, radius: 0.035 }),
+        bt1,
         makeComponent('transition', { length: 0.06, radius: 0.035, aftRadius: 0.026, shape: 'conical' }),
         makeComponent('bodytube', { length: 0.28, radius: 0.026 }),
         makeFin('trapezoidfinset', { finCount: 4, rootChord: 0.12, tipChord: 0.05, sweep: 0.04, height: 0.09, thickness: 0.0032 }),
-        makeComponent('parachute'),
-        makeComponent('parachute'),
       );
-      // 双伞：主伞 0.5 m CD 0.8，副伞 0.35 m CD 0.8（下降段阻力以伞为主）
-      s.children[5].properties['diameter'] = '0.5';
-      s.children[5].properties['cd'] = '0.8';
-      s.children[6].properties['diameter'] = '0.35';
-      s.children[6].properties['cd'] = '0.8';
       return rocketModel('大直径火箭', [s]);
     },
   },
@@ -113,14 +116,16 @@ export const PRESETS: Preset[] = [
         makeFin('ellipticalfinset', { finCount: 3, rootChord: 0.06, height: 0.05, thickness: 0.003 }),
       );
       const s2 = stage('Stage 3');
+      const bt3 = makeComponent('bodytube', { length: 0.14, radius: 0.018 });
+      const chute = makeComponent('parachute', { axialOffset: 0.04 });
+      chute.properties['diameter'] = '0.4';
+      chute.properties['cd'] = '0.8';
+      bt3.children.push(chute);
       s2.children.push(
         makeComponent('transition', { length: 0.04, radius: 0.024, aftRadius: 0.018, shape: 'ogive' }),
-        makeComponent('bodytube', { length: 0.14, radius: 0.018 }),
+        bt3,
         makeFin('trapezoidfinset', { finCount: 3, rootChord: 0.04, tipChord: 0.02, sweep: 0.015, height: 0.04, thickness: 0.0025 }),
-        makeComponent('parachute'),
       );
-      s2.children[3].properties['diameter'] = '0.4';
-      s2.children[3].properties['cd'] = '0.8';
       return rocketModel('三级重型火箭', [s0, s1, s2]);
     },
   },
@@ -138,12 +143,14 @@ export const PRESETS: Preset[] = [
       mt.properties['motorId'] = 'd12-5';
       const fin = makeFin('ellipticalfinset', { finCount: 4, rootChord: 0.1, height: 0.07, thickness: 0.0035 });
       fin.properties['cant'] = '1.5';  // 1.5° 倾斜，减少滚转
-      const para = makeComponent('parachute');
+      // 回收舱（机身管内前段）：主伞 + 飘带
+      const para = makeComponent('parachute', { axialOffset: 0.08 });
       para.properties['diameter'] = '0.6';
       para.properties['cd'] = '0.8';
-      const streamer = makeComponent('streamer', { length: 0.4 });
+      const streamer = makeComponent('streamer', { length: 0.4, axialOffset: 0.2 });
       streamer.properties['width'] = '0.1';
       streamer.properties['cd'] = '1.2';
+      bt.children.push(para, streamer);
       s.children.push(
         nc, bt,
         makeComponent('tubecoupler', { length: 0.08, radius: 0.04 }),
@@ -155,7 +162,6 @@ export const PRESETS: Preset[] = [
         makeComponent('masscomponent', { axialOffset: 0.1 }),
         fin,
         makeComponent('launchlug', { length: 0.05, radius: 0.004, axialOffset: 0.12 }),
-        para, streamer,
       );
       return rocketModel('工程级精细火箭', [s]);
     },
@@ -170,16 +176,16 @@ export const PRESETS: Preset[] = [
       bt.properties['wallthickness'] = '0.0008';
       const fin = makeFin('ellipticalfinset', { finCount: 3, rootChord: 0.05, height: 0.04, thickness: 0.0025 });
       fin.properties['cant'] = '0.5';
-      const para = makeComponent('parachute');
+      const para = makeComponent('parachute', { axialOffset: 0.06 }); // 回收舱：机身管内前段
       para.properties['diameter'] = '0.2';
       para.properties['cd'] = '0.8';
+      bt.children.push(para);
       s.children.push(
         nc, bt,
         makeComponent('transition', { length: 0.03, radius: 0.015, aftRadius: 0.011, shape: 'conical' }),
         makeComponent('innertube', { length: 0.07, radius: 0.009 }),
         fin,
         makeComponent('launchlug', { length: 0.04, radius: 0.003, axialOffset: 0.1 }),
-        para,
       );
       s.children[3].properties['motorId'] = 'a8-3';
       return rocketModel('高发比竞速火箭', [s]);

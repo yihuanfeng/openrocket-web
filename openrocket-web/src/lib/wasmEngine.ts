@@ -12,7 +12,8 @@ async function ensureWasm(): Promise<TeavmInstance> {
   if (!wasmPromise) {
     wasmPromise = (async () => {
       // TeaVM 运行时（classes.wasm-runtime.js）为 IIFE：执行后注入 globalThis.TeaVM.wasmGC
-      const rtRes = await fetch('/wasm/classes.wasm-runtime.js');
+      const base = import.meta.env.BASE_URL;
+      const rtRes = await fetch(`${base}wasm/classes.wasm-runtime.js`);
       if (!rtRes.ok) throw new Error(`TeaVM 运行时加载失败（${rtRes.status}）`);
       const rtText = await rtRes.text();
       // 动态执行自己产物的静态加载器（不在 CSP 受限环境）；加载 wasm 并返回实例
@@ -22,7 +23,7 @@ async function ensureWasm(): Promise<TeavmInstance> {
         TeaVM?: { wasmGC?: { load: (url: string, opts: unknown) => Promise<TeavmInstance> } };
       }).TeaVM;
       if (!T?.wasmGC) throw new Error('TeaVM 全局未注入（wasmGC 缺失）');
-      return await T.wasmGC.load('/wasm/classes.wasm', {});
+      return await T.wasmGC.load(`${import.meta.env.BASE_URL}wasm/classes.wasm`, {});
     })();
   }
   return wasmPromise;

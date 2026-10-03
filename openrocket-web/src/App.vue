@@ -22,6 +22,8 @@ import { PRESETS } from './lib/presets';
 import { modelToOrkBlob } from './lib/orkSerializer';
 
 const viewMode = ref<'2d' | '3d'>('2d');
+// 部署路径基准（GH Pages 子路径部署兼容；本地/根路径为 './'）
+const base = import.meta.env.BASE_URL;
 const orientation = ref<'vertical' | 'horizontal'>(localStorage.getItem('ork:orient') === 'h' ? 'horizontal' : 'vertical');
 function setOrient(o: 'vertical' | 'horizontal'): void {
   orientation.value = o;
@@ -767,7 +769,7 @@ async function loadOfficialExample(file: string): Promise<void> {
   menuOpen.value = false;
   examplesOpen.value = false;
   try {
-    const resp = await fetch(`/ork-assets/examples/${encodeURIComponent(file)}.ork`);
+    const resp = await fetch(`${base}ork-assets/examples/${encodeURIComponent(file)}.ork`);
     if (!resp.ok) throw new Error(`官方示例加载失败（HTTP ${resp.status}）`);
     const m = await parseOrk(await resp.arrayBuffer());
     model.value = m;
@@ -999,7 +1001,7 @@ function stabNote(): string {
     <!-- 顶栏 -->
     <header class="topbar">
       <div class="brand">
-        <img class="logo" src="/ork-assets/logo/openrocket-256.png" alt="OpenRocket" />
+        <img class="logo" :src="base + 'ork-assets/logo/openrocket-256.png'" alt="OpenRocket" />
         <span class="brand-name">OpenRocket<span class="web">Web</span></span>
         <span v-if="model" class="doc-name">{{ model.name }}<span v-if="fileName" class="doc-file"> · {{ fileName }}</span></span>
       </div>

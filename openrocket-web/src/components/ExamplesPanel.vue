@@ -8,6 +8,8 @@ import type { RocketComponent } from '../lib/types';
 
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: []; loadPreset: [name: string]; loadOfficial: [file: string] }>();
+// 部署路径基准（GH Pages 子路径部署兼容）
+const base = import.meta.env.BASE_URL;
 
 /** 统计一个组件树（用于内置示例真实构成） */
 function statTree(root: { type: string; children: unknown[] }): { total: number; types: string[] } {
@@ -58,7 +60,7 @@ const officialRoots = new Map<string, Promise<RocketComponent>>();
 function loadOfficialRoot(file: string): Promise<RocketComponent> {
   if (!officialRoots.has(file)) {
     officialRoots.set(file, (async () => {
-      const resp = await fetch(`/ork-assets/examples/${encodeURIComponent(file)}.ork`);
+      const resp = await fetch(`${base}ork-assets/examples/${encodeURIComponent(file)}.ork`);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const m = await parseOrk(await resp.arrayBuffer());
       return m.root;
@@ -93,7 +95,7 @@ function esc(e: KeyboardEvent): void {
       <div class="ex-panel" role="dialog" aria-modal="true" tabindex="-1" @keydown="esc">
         <div class="ex-head">
           <div class="ex-title">
-            <img src="/ork-assets/logo/openrocket-256.png" alt="OpenRocket" class="ex-logo" />
+            <img :src="base + 'ork-assets/logo/openrocket-256.png'" alt="OpenRocket" class="ex-logo" />
             <div>
               <h3>示例设计</h3>
               <p>从内置或 OpenRocket 官方示例开始，一键加载快速测试</p>
