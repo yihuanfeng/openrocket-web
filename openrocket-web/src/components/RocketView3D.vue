@@ -183,21 +183,19 @@ function buildTris(): Tri[] {
   const tris: Tri[] = [];
   const addQuad = (a: number[], b: number[], c: number[], d: number[], seg: Seg, light: number, sel: boolean) => {
     const cls = clsOf(seg.kind);
-    const z0 = Math.min(a[2], b[2], c[2], d[2]);
-    const z1 = Math.max(a[2], b[2], c[2], d[2]);
-    tris.push({ pts: [a, b, c], depth: 0, color: triColor(seg, light), selected: sel, cls, kind: seg.kind, comp: seg.comp, z0, z1 });
-    tris.push({ pts: [a, c, d], depth: 0, color: triColor(seg, light * 0.96), selected: sel, cls, kind: seg.kind, comp: seg.comp, z0, z1 });
+    // 渐变基准用整个部件的轴向范围（seg.z0/z1），所有 quad 共享 → 跨层连续无分阶
+    tris.push({ pts: [a, b, c], depth: 0, color: triColor(seg, light), selected: sel, cls, kind: seg.kind, comp: seg.comp, z0: seg.z0, z1: seg.z1 });
+    tris.push({ pts: [a, c, d], depth: 0, color: triColor(seg, light * 0.96), selected: sel, cls, kind: seg.kind, comp: seg.comp, z0: seg.z0, z1: seg.z1 });
   };
   const segAdd = (s: Seg, z0: number, z1: number, r0: number, r1: number, cx = 0, cy = 0) => {
     const steps = s.kind === 'nosecone' ? 10 : 4;
     const conical = s.kind === 'nosecone' && String(s.comp.properties?.['shape'] ?? 'ogive').toLowerCase() === 'conical';
     const zs: number[] = [];
     for (let i = 0; i <= steps; i++) zs.push(z0 + (z1 - z0) * i / steps);
-    // 每顶点计算光照（含镜面高光 + 轴向衰减），存入顶点；相邻 quad 共享顶点光照 → 表面连续平滑
+    // 每顶点计算圆周光照（镜面高光 + 底部压暗）；轴向明暗由 draw 的跨部件渐变统一处理，避免层间阶跃
     const rings = zs.map((z, i) => {
       const t = i / steps;
       const r = r0 + (r1 - r0) * (conical ? t : s.kind === 'nosecone' ? Math.sin(t * Math.PI / 2) : t);
-      const axial = 1 - 0.22 * (z / Math.max(total.value, 0.001));
       const ring: [number, number, number, number][] = [];
       for (let j = 0; j < N; j++) {
         const th = (j / N) * Math.PI * 2;
@@ -205,7 +203,7 @@ function buildTris(): Tri[] {
         let light = 0.4 + 0.6 * Math.pow(cAng, 1.4);
         if (cAng > 0.82) light += (cAng - 0.82) * 2.4; // 镜面高光
         if (cAng < 0.2) light -= (0.2 - cAng) * 0.6; // 底部反光压暗
-        ring.push([cx + r * Math.cos(th), cy + r * Math.sin(th), z, Math.min(light * axial, 1.4)]);
+        ring.push([cx + r * Math.cos(th), cy + r * Math.sin(th), z, Math.min(light, 1.4)]);
       }
       return ring;
     });
