@@ -74,6 +74,13 @@ function triColor(seg: Seg, light: number): string {
   const t = light > 0.5 ? (light - 0.5) * 2 : light * 2;
   return `rgb(${ch3(ca, cb, t).join(',')})`;
 }
+/** 按倍率压暗/提亮 rgb 颜色（f<1 变暗，f>1 变亮） */
+function scaleRGB(rgb: string, f: number): string {
+  const m = rgb.match(/\d+/g);
+  if (!m || m.length < 3) return rgb;
+  const clamp = (v: number) => Math.min(255, Math.max(0, Math.round(v)));
+  return `rgb(${clamp(Number(m[0]) * f)},${clamp(Number(m[1]) * f)},${clamp(Number(m[2]) * f)})`;
+}
 
 // —— 程序化表面材质（半透明纹理叠加在光照色上，保留明暗与部件主色）——
 const PAT_DEFS: Record<string, (c: CanvasRenderingContext2D, s: number) => void> = {
@@ -420,17 +427,22 @@ function draw(): void {
       ctx.stroke();
     } else {
       const mat = xt <= 0.01 ? getPat(t.kind, ctx) : null;
+      // 轴向渐变：模拟圆柱曲面受光（前端提亮 → 尾端压暗），替代平板色
+      const xs = [p[0].x, p[1].x, p[2].x], ys = [p[0].y, p[1].y, p[2].y];
+      const a0 = isH.value ? Math.min(...xs) : Math.min(...ys);
+      const a1 = isH.value ? Math.max(...xs) : Math.max(...ys);
+      const g2 = ctx.createLinearGradient(isH.value ? a0 : 0, isH.value ? 0 : a0, isH.value ? a1 : 0, isH.value ? 0 : a1);
+      g2.addColorStop(0, scaleRGB(t.color, 1.3));
+      g2.addColorStop(0.5, t.color);
+      g2.addColorStop(1, scaleRGB(t.color, 0.45));
+      ctx.fillStyle = g2;
+      ctx.fill();
       if (mat) {
-        // 材质纹理叠加：先光照色打底，再半透明纹理（保留明暗与部件主色）
-        ctx.fillStyle = t.color;
-        ctx.fill();
+        // 材质纹理叠加：半透明纹理盖在渐变上（保留明暗与部件主色）
         ctx.globalAlpha = MAT_MAP[t.kind]?.a ?? 0.3;
         ctx.fillStyle = mat;
         ctx.fill();
         ctx.globalAlpha = 1;
-      } else {
-        ctx.fillStyle = t.color;
-        ctx.fill();
       }
       if (t.selected) {
         ctx.strokeStyle = '#ff9f0a';
@@ -440,8 +452,9 @@ function draw(): void {
         ctx.stroke();
         ctx.shadowBlur = 0;
       } else {
-        ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-        ctx.lineWidth = 0.6;
+        // 弱化描边：去掉网格线框感，保留轻微部件边界
+        ctx.strokeStyle = 'rgba(255,255,255,0.045)';
+        ctx.lineWidth = 0.5;
         ctx.stroke();
       }
     }

@@ -444,7 +444,7 @@ const marks = computed(() => rulerMarks());
   box-shadow: none; transition: all 0.15s ease; backdrop-filter: blur(8px);
 }
 .xray2d button:first-child { border-radius: 7px 0 0 7px; border-right: 0; }
-.xray2d button:last-child { border-radius: 0 7px 7px 0; }
+.xray2d button:not(:first-child):not(.fit) { border-radius: 0; }
 .xray2d button.on { background: #0a84ff; color: #fff; border-color: #0a84ff; box-shadow: 0 0 12px rgba(10,132,255,0.5); }
 .xray2d button:not(.on):hover { background: rgba(30, 82, 160, 0.6); }
 .draggable { cursor: ns-resize; }
