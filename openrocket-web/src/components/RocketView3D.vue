@@ -77,53 +77,64 @@ function triColor(seg: Seg, light: number): string {
 
 // —— 程序化表面材质（半透明纹理叠加在光照色上，保留明暗与部件主色）——
 const PAT_DEFS: Record<string, (c: CanvasRenderingContext2D, s: number) => void> = {
-  // 碳纤维：45° 斜纹编织（白高光 + 黑阴影线）
+  // 碳纤维：45° 斜纹编织（白高光 + 黑阴影线，密织）
   carbon(c, s) {
-    c.strokeStyle = 'rgba(255,255,255,0.22)';
-    c.lineWidth = 1;
-    for (let i = -s; i < s * 2; i += 7) { c.beginPath(); c.moveTo(i, 0); c.lineTo(i + s, s); c.stroke(); }
-    c.strokeStyle = 'rgba(0,0,0,0.30)';
-    for (let i = -s; i < s * 2; i += 7) { c.beginPath(); c.moveTo(i + 3.5, 0); c.lineTo(i + 3.5 + s, s); c.stroke(); }
+    c.strokeStyle = 'rgba(255,255,255,0.32)';
+    c.lineWidth = 1.2;
+    for (let i = -s; i < s * 2; i += 6) { c.beginPath(); c.moveTo(i, 0); c.lineTo(i + s, s); c.stroke(); }
+    c.strokeStyle = 'rgba(0,0,0,0.42)';
+    for (let i = -s; i < s * 2; i += 6) { c.beginPath(); c.moveTo(i + 3, 0); c.lineTo(i + 3 + s, s); c.stroke(); }
   },
-  // 金属拉丝：细水平磨砂线
+  // 金属拉丝：细水平磨砂线（更密更亮）
   brushed(c, s) {
-    for (let y = 0; y < s; y += 3) {
-      c.fillStyle = y % 6 === 0 ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)';
-      c.fillRect(0, y, s, 2);
+    for (let y = 0; y < s; y += 2.5) {
+      c.fillStyle = y % 5 === 0 ? 'rgba(255,255,255,0.24)' : 'rgba(0,0,0,0.18)';
+      c.fillRect(0, y, s, 1.4);
     }
   },
-  // 布料：经纬细网格
+  // 布料：经纬细网格（密织）
   fabric(c, s) {
-    c.strokeStyle = 'rgba(255,255,255,0.28)';
-    c.lineWidth = 1;
-    for (let i = 0; i <= s; i += 8) {
+    c.strokeStyle = 'rgba(255,255,255,0.36)';
+    c.lineWidth = 1.1;
+    for (let i = 0; i <= s; i += 6) {
       c.beginPath(); c.moveTo(i, 0); c.lineTo(i, s); c.stroke();
       c.beginPath(); c.moveTo(0, i); c.lineTo(s, i); c.stroke();
     }
   },
-  // 玻纤光泽：横向高光带（模拟曲面反射）
+  // 玻纤光泽：横向高光带（模拟曲面反射，加强）
   gloss(c, s) {
     const g = c.createLinearGradient(0, 0, s, 0);
     g.addColorStop(0, 'rgba(255,255,255,0)');
-    g.addColorStop(0.32, 'rgba(255,255,255,0.34)');
-    g.addColorStop(0.5, 'rgba(255,255,255,0)');
+    g.addColorStop(0.3, 'rgba(255,255,255,0.5)');
+    g.addColorStop(0.48, 'rgba(255,255,255,0.06)');
+    g.addColorStop(0.66, 'rgba(255,255,255,0.4)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
     c.fillStyle = g;
     c.fillRect(0, 0, s, s);
   },
 };
 // 部件 → 材质 + 叠加透明度
 const MAT_MAP: Record<string, { pat?: string; a: number }> = {
-  nosecone: { pat: 'gloss', a: 0.5 },
-  bodytube: { pat: 'carbon', a: 0.34 },
-  transition: { pat: 'brushed', a: 0.32 },
-  trapezoidfinset: { pat: 'carbon', a: 0.26 },
-  ellipticalfinset: { pat: 'carbon', a: 0.26 },
-  finset: { pat: 'carbon', a: 0.26 },
-  parachute: { pat: 'fabric', a: 0.5 },
-  streamer: { pat: 'fabric', a: 0.5 },
-  innertube: { pat: 'brushed', a: 0.2 },
-  enginemount: { pat: 'brushed', a: 0.2 },
-  engineblock: { pat: 'brushed', a: 0.2 },
+  nosecone: { pat: 'gloss', a: 0.62 },
+  bodytube: { pat: 'carbon', a: 0.52 },
+  transition: { pat: 'brushed', a: 0.48 },
+  trapezoidfinset: { pat: 'carbon', a: 0.42 },
+  ellipticalfinset: { pat: 'carbon', a: 0.42 },
+  freeformfinset: { pat: 'carbon', a: 0.42 },
+  finset: { pat: 'carbon', a: 0.42 },
+  tubefinset: { pat: 'brushed', a: 0.4 },
+  launchlug: { pat: 'gloss', a: 0.4 },
+  railbutton: { pat: 'gloss', a: 0.4 },
+  parachute: { pat: 'fabric', a: 0.62 },
+  streamer: { pat: 'fabric', a: 0.62 },
+  shockcord: { pat: 'fabric', a: 0.4 },
+  masscomponent: { pat: 'brushed', a: 0.35 },
+  innertube: { pat: 'brushed', a: 0.35 },
+  enginemount: { pat: 'brushed', a: 0.35 },
+  engineblock: { pat: 'brushed', a: 0.35 },
+  tubecoupler: { pat: 'brushed', a: 0.35 },
+  bulkhead: { pat: 'brushed', a: 0.35 },
+  centeringring: { pat: 'brushed', a: 0.35 },
 };
 const patCache = new Map<string, CanvasPattern | null>();
 function getPat(kind: string, ctx: CanvasRenderingContext2D): CanvasPattern | null {

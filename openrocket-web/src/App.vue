@@ -24,7 +24,8 @@ import { modelToOrkBlob } from './lib/orkSerializer';
 const viewMode = ref<'2d' | '3d'>('2d');
 // 部署路径基准（GH Pages 子路径部署兼容；本地/根路径为 './'）
 const base = import.meta.env.BASE_URL;
-const orientation = ref<'vertical' | 'horizontal'>(localStorage.getItem('ork:orient') === 'h' ? 'horizontal' : 'vertical');
+// 默认横置摆放（无存储记录时）；用户切换后尊重 localStorage
+const orientation = ref<'vertical' | 'horizontal'>(localStorage.getItem('ork:orient') === 'v' ? 'vertical' : 'horizontal');
 function setOrient(o: 'vertical' | 'horizontal'): void {
   orientation.value = o;
   localStorage.setItem('ork:orient', o === 'horizontal' ? 'h' : 'v');
