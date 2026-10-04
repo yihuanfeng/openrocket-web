@@ -36,6 +36,8 @@ interface Tri {
   cls: 'outer' | 'inner' | 'fin';
   kind: string;
   comp: RocketComponent;
+  z0: number; // 所属部件轴向起点（跨 quad 连续渐变的基准）
+  z1: number; // 所属部件轴向终点
 }
 
 function clsOf(kind: string): Tri['cls'] {
@@ -181,21 +183,29 @@ function buildTris(): Tri[] {
   const tris: Tri[] = [];
   const addQuad = (a: number[], b: number[], c: number[], d: number[], seg: Seg, light: number, sel: boolean) => {
     const cls = clsOf(seg.kind);
-    tris.push({ pts: [a, b, c], depth: 0, color: triColor(seg, light), selected: sel, cls, kind: seg.kind, comp: seg.comp });
-    tris.push({ pts: [a, c, d], depth: 0, color: triColor(seg, light * 0.96), selected: sel, cls, kind: seg.kind, comp: seg.comp });
+    const z0 = Math.min(a[2], b[2], c[2], d[2]);
+    const z1 = Math.max(a[2], b[2], c[2], d[2]);
+    tris.push({ pts: [a, b, c], depth: 0, color: triColor(seg, light), selected: sel, cls, kind: seg.kind, comp: seg.comp, z0, z1 });
+    tris.push({ pts: [a, c, d], depth: 0, color: triColor(seg, light * 0.96), selected: sel, cls, kind: seg.kind, comp: seg.comp, z0, z1 });
   };
   const segAdd = (s: Seg, z0: number, z1: number, r0: number, r1: number, cx = 0, cy = 0) => {
-    const steps = s.kind === 'nosecone' ? 6 : 2;
+    const steps = s.kind === 'nosecone' ? 10 : 4;
     const conical = s.kind === 'nosecone' && String(s.comp.properties?.['shape'] ?? 'ogive').toLowerCase() === 'conical';
     const zs: number[] = [];
     for (let i = 0; i <= steps; i++) zs.push(z0 + (z1 - z0) * i / steps);
+    // 每顶点计算光照（含镜面高光 + 轴向衰减），存入顶点；相邻 quad 共享顶点光照 → 表面连续平滑
     const rings = zs.map((z, i) => {
       const t = i / steps;
       const r = r0 + (r1 - r0) * (conical ? t : s.kind === 'nosecone' ? Math.sin(t * Math.PI / 2) : t);
-      const ring: [number, number, number][] = [];
+      const axial = 1 - 0.22 * (z / Math.max(total.value, 0.001));
+      const ring: [number, number, number, number][] = [];
       for (let j = 0; j < N; j++) {
         const th = (j / N) * Math.PI * 2;
-        ring.push([cx + r * Math.cos(th), cy + r * Math.sin(th), z]);
+        const cAng = Math.abs(Math.cos(th + 0.5));
+        let light = 0.4 + 0.6 * Math.pow(cAng, 1.4);
+        if (cAng > 0.82) light += (cAng - 0.82) * 2.4; // 镜面高光
+        if (cAng < 0.2) light -= (0.2 - cAng) * 0.6; // 底部反光压暗
+        ring.push([cx + r * Math.cos(th), cy + r * Math.sin(th), z, Math.min(light * axial, 1.4)]);
       }
       return ring;
     });
@@ -203,15 +213,9 @@ function buildTris(): Tri[] {
     for (let i = 0; i < rings.length - 1; i++) {
       for (let j = 0; j < N; j++) {
         const j2 = (j + 1) % N;
-        // 圆周方向光照：面向观察者一侧亮；高光区域叠加镜面峰值
-        const ang = (j / N) * Math.PI * 2 + 0.5;
-        const cAng = Math.abs(Math.cos(ang));
-        let light = 0.4 + 0.6 * Math.pow(cAng, 1.4);
-        if (cAng > 0.82) light += (cAng - 0.82) * 2.4; // 镜面高光
-        if (cAng < 0.2) light -= (0.2 - cAng) * 0.6; // 底部反光压暗
-        // 轴向高光：沿长度方向渐变（前段稍亮）
-        const axial = 1 - 0.22 * ((z0 + z1) / 2 / Math.max(total.value, 0.001));
-        addQuad(rings[i][j], rings[i][j2], rings[i + 1][j2], rings[i + 1][j], s, Math.min(light * axial, 1.5), sel);
+        // 四边形光照 = 四顶点平均（相邻 quad 共享顶点 → 明暗连续，无网格阶跃线）
+        const l = (rings[i][j][3] + rings[i][j2][3] + rings[i + 1][j2][3] + rings[i + 1][j][3]) / 4;
+        addQuad(rings[i][j], rings[i][j2], rings[i + 1][j2], rings[i + 1][j], s, l, sel);
       }
     }
   };
@@ -444,14 +448,13 @@ function draw(): void {
       ctx.stroke();
     } else {
       const mat = xt <= 0.01 ? getPat(t.kind, ctx) : null;
-      // 轴向渐变：模拟圆柱曲面受光（前端提亮 → 尾端压暗），替代平板色
-      const xs = [p[0].x, p[1].x, p[2].x], ys = [p[0].y, p[1].y, p[2].y];
-      const a0 = isH.value ? Math.min(...xs) : Math.min(...ys);
-      const a1 = isH.value ? Math.max(...xs) : Math.max(...ys);
-      const g2 = ctx.createLinearGradient(isH.value ? a0 : 0, isH.value ? 0 : a0, isH.value ? a1 : 0, isH.value ? 0 : a1);
-      g2.addColorStop(0, scaleRGB(t.color, 1.3));
+      // 轴向渐变：跨整个部件连续（前段提亮 → 后段压暗），相邻 quad 共享端点 → 无箍线
+      const axA = isH.value ? axPos3(t.z0) : axPos3(t.z0);
+      const axB = isH.value ? axPos3(t.z1) : axPos3(t.z1);
+      const g2 = ctx.createLinearGradient(isH.value ? axA : 0, isH.value ? 0 : axA, isH.value ? axB : 0, isH.value ? 0 : axB);
+      g2.addColorStop(0, scaleRGB(t.color, 1.16));
       g2.addColorStop(0.5, t.color);
-      g2.addColorStop(1, scaleRGB(t.color, 0.45));
+      g2.addColorStop(1, scaleRGB(t.color, 0.74));
       ctx.fillStyle = g2;
       ctx.fill();
       if (mat) {
@@ -468,12 +471,8 @@ function draw(): void {
         ctx.shadowBlur = 10;
         ctx.stroke();
         ctx.shadowBlur = 0;
-      } else {
-        // 极弱描边：仅保留选中高亮，普通状态几乎无线条感
-        ctx.strokeStyle = 'rgba(255,255,255,0.02)';
-        ctx.lineWidth = 0.5;
-        ctx.stroke();
       }
+      // 实体模式无描边：表面完全平滑连续（不显示三角网格边界）
     }
   }
 
