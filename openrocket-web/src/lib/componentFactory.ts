@@ -18,6 +18,7 @@ export interface ComponentParams {
   sweep?: number;
   height?: number;
   thickness?: number;
+  angleOffset?: number;
   density?: number;
 }
 
@@ -40,6 +41,11 @@ export const DEFAULT_PARAMS: Record<string, ComponentParams> = {
   masscomponent: {},
   streamer: { length: 0.3 },
   shockcord: {},
+  // 组件补齐：导轨按钮 / 管尾翼 / 并联助推器 / 捆绑舱
+  railbutton: { length: 0.01, radius: 0.003 },
+  tubefinset: { finCount: 6, rootChord: 0.05, height: 0.02, thickness: 0.002, angleOffset: 0 },
+  boosters: {},
+  pods: {},
 };
 
 export const COMPONENT_TYPES: { code: string; label: string; quick: string }[] = [
@@ -49,6 +55,8 @@ export const COMPONENT_TYPES: { code: string; label: string; quick: string }[] =
   { code: 'trapezoidfinset', label: '梯形尾翼组', quick: '＋尾翼' },
   { code: 'ellipticalfinset', label: '椭圆尾翼组', quick: '＋椭圆翼' },
   { code: 'freeformfinset', label: '自由形状尾翼', quick: '＋自由翼' },
+  { code: 'tubefinset', label: '管尾翼组', quick: '＋管翼' },
+  { code: 'railbutton', label: '导轨按钮', quick: '＋导轨钮' },
   { code: 'parachute', label: '降落伞', quick: '＋伞' },
   { code: 'streamer', label: '飘带', quick: '＋飘带' },
   { code: 'shockcord', label: '冲击绳', quick: '＋冲击绳' },
@@ -80,6 +88,16 @@ export function makeComponent(type: string, over: ComponentParams = {}): RocketC
     density: Math.max(0, n(p.density, 0)),
   };
   switch (type) {
+    case 'stage':
+      return {
+        ...base,
+        type: 'stage',
+        name: '级',
+        length: Math.max(0, n(p.length, 0.3)),
+        radius: Math.max(0, n(p.radius, 0.012)),
+        axialOffset: Math.max(0, n(p.axialOffset, NaN)),
+        properties: {},
+      };
     case 'nosecone':
       return {
         ...base,
@@ -243,6 +261,48 @@ export function makeComponent(type: string, over: ComponentParams = {}): RocketC
         name: '冲击绳',
         axialOffset: Math.max(0, n(p.axialOffset, NaN)),
         properties: { cordlength: '0.2' },
+      };
+    case 'railbutton':
+      return {
+        ...base,
+        type: 'railbutton',
+        name: '导轨按钮',
+        length: Math.max(0, n(p.length, 0.01)),
+        radius: Math.max(0, n(p.radius, 0.003)),
+        axialOffset: Math.max(0, n(p.axialOffset, NaN)),
+        properties: {},
+      };
+    case 'tubefinset':
+      return {
+        ...base,
+        type: 'tubefinset',
+        name: '管尾翼组',
+        length: Math.max(0, n(p.length, 0.05)),
+        properties: {
+          fincount: String(Math.max(1, Math.round(n(p.finCount, 6)))),
+          rootchord: String(Math.max(0, n(p.rootChord, 0.05))),
+          height: String(Math.max(0, n(p.height, 0.02))),
+          thickness: String(Math.max(0, n(p.thickness, 0.002))),
+          angleoffset: String(n(p.angleOffset, 0)),
+        },
+      };
+    case 'boosters':
+      return {
+        ...base,
+        type: 'boosters',
+        name: '助推器（并联级）',
+        children: [makeComponent('stage', { radius: Math.max(0, n(p.radius, 0.012)) })],
+        properties: {},
+      };
+    case 'pods':
+      return {
+        ...base,
+        type: 'pods',
+        name: '捆绑舱',
+        children: [
+          makeComponent('stage', { radius: Math.max(0, n(p.radius, 0.012)) }),
+        ],
+        properties: {},
       };
     default:
       return { ...base, type: 'bodytube', name: '机身管', properties: {} };

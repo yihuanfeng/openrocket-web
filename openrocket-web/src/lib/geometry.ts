@@ -22,6 +22,8 @@ export interface GeoSeg {
   parentLen: number;
   /** 层级：0 = stage 直系（外形），1 = 子组件（内部件/挂件/尾翼） */
   depth: number;
+  /** 侧向偏移（米）：并联级（boosters/pods）相对主级鼻端的横向位移；缺省 0 */
+  xOff?: number;
 }
 
 export function isPos(v: number): boolean {
@@ -101,10 +103,93 @@ function isBodyKind(t: string): boolean {
   return t === 'bodytube' || t === 'nosecone' || t === 'transition';
 }
 
-/** 把组件树展开为带绝对位置的段列表（z=0 鼻尖，向尾部递增） */
+/** 把组件树展开为带绝对位置的段列表（z=0 鼻尖，向尾部递增）
+ *  主级（stage）串联；boosters/pods（并联级）侧向偏移 xOff 渲染 */
 export function layoutRocket(root: RocketComponent): GeoSeg[] {
   const segs: GeoSeg[] = [];
   let base = 0; // 上级 stage 尾端（多级首尾相连）
+
+  // 第一遍：主级最大外形半径（供并联级 xOff 定位）
+  let maxMainR = 0;
+  for (const stage of root.children) {
+    if (stage.type !== 'stage') continue;
+    for (const c of stage.children) {
+      if (isBodyKind(c.type)) {
+        const r = radiusOf(c, 0);
+        if (isPos(r)) maxMainR = Math.max(maxMainR, r);
+      }
+    }
+  }
+
+  /** 并联体布局：其直系组件自鼻端（z=0）起算，整体侧向偏移 xOff */
+  const layoutParallel = (par: RocketComponent, xOff: number): number => {
+    let parMaxR = 0;
+    let pcursor = 0;
+    for (const c of par.children ?? []) {
+      const len = lenOf(c);
+      let pos: number;
+      if (isNaN(c.axialOffset)) {
+        pos = pcursor;
+      } else if ((c.axialMethod ?? '') === 'after') {
+        pos = pcursor + c.axialOffset;
+      } else {
+        pos = axialPos(c, len, Math.max(parEstLen(par), len));
+      }
+      const z0 = pos;
+      const z1 = z0 + len;
+      let r = radiusOf(c, 0);
+      if (!isPos(r)) r = 0.012;
+      const r0 = c.type === 'nosecone' ? 0 : r;
+      const r1 = c.type === 'nosecone' ? radiusOf(c, 0) : r;
+      segs.push({ kind: c.type, name: c.name, comp: c, z0, z1, r0, r1, parentZ0: 0, parentLen: len, depth: 0, xOff });
+      if (isBodyKind(c.type)) parMaxR = Math.max(parMaxR, r1);
+      for (const ch of c.children ?? []) {
+        const clen = lenOf(ch);
+        let cpos: number;
+        if (isNaN(ch.axialOffset)) {
+          cpos = len; // AFTER 子组件：父尾端
+        } else if ((ch.axialMethod ?? '') === 'after') {
+          cpos = len + ch.axialOffset;
+        } else {
+          cpos = axialPos(ch, clen, len);
+        }
+        const cz0 = z0 + cpos;
+        const cr = radiusOf(ch, r1);
+        segs.push({
+          kind: ch.type,
+          name: ch.name,
+          comp: ch,
+          z0: cz0,
+          z1: cz0 + clen,
+          r0: ch.type === 'nosecone' ? 0 : cr,
+          r1: ch.type === 'nosecone' ? radiusOf(ch, 0) : cr,
+          parentZ0: z0,
+          parentLen: len,
+          depth: 1,
+          xOff,
+        });
+      }
+      pcursor = Math.max(pcursor, z1);
+    }
+    return parMaxR;
+  };
+  function parEstLen(par: RocketComponent): number {
+    let s = 0;
+    for (const c of par.children ?? []) {
+      if (isNaN(c.axialOffset)) s += lenOf(c);
+    }
+    return s;
+  }
+
+  // 并联级累计偏移（多个 boosters/pods 依次右排）
+  let parAcc = 0;
+  for (const stage of root.children) {
+    if (stage.type === 'boosters' || stage.type === 'pods') {
+      const xOff = maxMainR + 0.002 + parAcc;
+      const mR = layoutParallel(stage, xOff);
+      parAcc += mR + 0.002;
+    }
+  }
   for (const stage of root.children) {
     if (stage.type !== 'stage') continue;
     // stage 自身轴向位置：无 offset = AFTER 接续在上级尾端；有 offset 按父=rocket(outerLen=已用 base) 计算

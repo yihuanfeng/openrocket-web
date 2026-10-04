@@ -30,12 +30,12 @@ function buildShapes(root: RocketComponent): Shape[] {
 
 const shapes = computed(() => buildShapes(props.root));
 
-/** 视图范围（米） */
+/** 视图范围（米）：并联级（xOff）纳入横向宽度 */
 const view = computed(() => {
   let maxZ = 0, maxR = 0;
   for (const s of shapes.value) {
     maxZ = Math.max(maxZ, s.z1);
-    maxR = Math.max(maxR, s.r0, s.r1);
+    maxR = Math.max(maxR, s.r0, s.r1, (s.xOff ?? 0) + s.r1);
   }
   const pad = maxR * 0.2 + 0.008;
   return { height: Math.max(maxZ, 0.05) + pad * 2, maxR, pad, length: maxZ };
@@ -61,6 +61,12 @@ function axPos(z: number): number {
   const pad = view.value.pad;
   if (isH.value) return (pad + z) / view.value.height * W.value;
   return (pad + z) / view.value.height * H.value;
+}
+/** 并联级侧向平移（SVG transform）：竖版 x 方向，横版 y 方向 */
+function xOffT(s: Shape): string {
+  const xo = (s.xOff ?? 0) * PX.value;
+  if (!xo) return '';
+  return isH.value ? `translate(0 ${xo.toFixed(1)})` : `translate(${xo.toFixed(1)} 0)`;
 }
 /** 半径坐标（中心线单侧，真实比例）：竖版 → x，横版 → y */
 function radPos(r: number): number {
@@ -115,12 +121,37 @@ function shapePath(s: Shape): string {
   }
 }
 
-/** 尾翼（一侧梯形板，根弦 = z1-z0，高 = height；径向按真实比例） */
+/** 尾翼板（按类型绘制：梯形/椭圆/自由），根弦 = z1-z0，高 = height；径向按真实比例 */
 function finPath(s: Shape, a0: number, a1: number): string {
   const h = parseFloat(s.comp.properties['height'] ?? '') || 0.05;
   const r0 = radPos(s.r0) - midLine();
   const hPx = h * PX.value;
   const rootc = Math.max(s.z1 - s.z0, 0.001);
+
+  // 椭圆尾翼：根弦 + 半椭圆翼尖（前后缘为椭圆曲线，OpenRocket EllipticalFinSet 外形）
+  if (s.kind === 'ellipticalfinset') {
+    const q = (t: number, fr: number) => pt(a0 + t * (a1 - a0), r0 + hPx * fr);
+    return `M ${pt(a0, r0)} Q ${q(0.2, 0.55)} ${q(0.5, 1)} Q ${q(0.8, 0.55)} ${pt(a1, r0)} Z`;
+  }
+
+  // 自由尾翼：points 点序列（官方 FreeformFinSet 相对坐标 x,y，x 沿弦向 0..1，y 沿翼高 0..1）；
+  // 无 points 时用默认剪式翼形
+  if (s.kind === 'freeformfinset') {
+    const raw = String(s.comp.properties['points'] ?? '');
+    const def: Array<[number, number]> = [[0, 0], [0.12, 0.6], [0.28, 1], [0.62, 1], [0.86, 0.55], [1, 0]];
+    let pts: Array<[number, number]> = def;
+    if (raw) {
+      const arr = raw.split(';').map((p) => {
+        const [x, y] = p.split(',').map(parseFloat);
+        return [x, y];
+      }).filter((p) => p.length === 2 && p.every(Number.isFinite)) as Array<[number, number]>;
+      if (arr.length >= 3) pts = arr;
+    }
+    const d = pts.map(([fx, fr], i) => `${i === 0 ? 'M' : 'L'} ${pt(a0 + fx * (a1 - a0), r0 + hPx * Math.min(Math.max(fr, 0), 1.5))}`).join(' ');
+    return `${d} Z`;
+  }
+
+  // 梯形尾翼（默认）：根弦、尖弦、后掠
   const tipc = parseFloat(s.comp.properties['tipchord'] ?? '');
   const tipcPx = (Number.isFinite(tipc) && tipc > 0 ? tipc / rootc : 1) * (a1 - a0);
   const sweep = parseFloat(s.comp.properties['sweep'] ?? '');
@@ -320,7 +351,7 @@ const marks = computed(() => rulerMarks());
       <!-- 中心线 -->
       <line v-if="!isH" :x1="W / 2" :y1="8" :x2="W / 2" :y2="H - 24" stroke="rgba(160,205,255,0.45)" stroke-dasharray="6 5" stroke-width="1" />
       <line v-else :x1="8" :y1="H / 2" :x2="W - RULER - 8" :y2="H / 2" stroke="rgba(160,205,255,0.45)" stroke-dasharray="6 5" stroke-width="1" />
-      <g v-for="(s, i) in shapes" :key="i">
+      <g v-for="(s, i) in shapes" :key="i" :transform="xOffT(s)">
         <!-- 一侧 -->
         <path
           :d="shapePath(s)"

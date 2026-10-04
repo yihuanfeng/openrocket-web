@@ -1,4 +1,4 @@
-# agents.md — OpenRocket Web 重构项目协作说明
+# AGENTS.md — OpenRocket Web 重构项目协作说明
 
 本文件面向参与本项目的 AI 代理（以及需要快速上手的人类协作者），说明项目目标、技术结构、关键约定、验证方式和当前状态。**先读本文件再动手**，避免重复踩坑或偏离既定方向。
 
@@ -6,17 +6,18 @@
 
 ## 1. 项目目标
 
-把 OpenRocket（Java 火箭模拟器，官方仓库在本仓 `openrocket/` 子目录）重构为 **Vue3 + TypeScript 纯前端 Web 版**（`openrocket-web/`）。当前已实现的完整主线：
+把 OpenRocket（Java 火箭模拟器）重构为 **Vue3 + TypeScript 纯前端 Web 版**（`openrocket-web/`）。当前已实现的完整主线：
 
-- 2D / 3D 火箭视图（横竖两种摆放、真实比例、剖视/实体、视角预设）
+- 2D / 3D 火箭视图（横竖两种摆放、真实比例、剖视/实体、视角预设；尾翼按梯形/椭圆/自由/管翼四种外形渲染）
 - 组件树 / 组件库 / 属性面板（增删改、轴向调整、半径继承）
+- 组件全覆盖：级 / 助推器（并联级）/ 捆绑舱 / 头锥 / 机身管 / 过渡段 / 梯形·椭圆·自由·管尾翼 / 发射导环 / 导轨按钮 / 内部件（内管·管接头·定心环·隔框·挡块）/ 回收（伞·飘带·减震绳）/ 配重 —— 全部可创建，无"即将支持"
 - 示例面板（6 个内置示例 + 16 个官方 .ork 示例，带缩略图）
 - 发动机配置（26 款内置发动机 + .eng 导入）
 - 仿真（JS 引擎：分析 + 2DOF 飞行仿真，发动机延迟扫描、多发动机对比）
 - 设置面板（主布局切换、单位、外观[待开发]）
 - UI：高饱和蓝主调、直线切分、紧凑
 
-硬约束：**不使用本地 Java 兜底**（不依赖 openrocket Java 运行时）；官方语义/数据以 `openrocket/` 源码与 docs 为准。
+硬约束：**不使用本地 Java 兜底**（不依赖 openrocket Java 运行时）；官方语义/数据以 OpenRocket 官方仓库与 docs 为准。
 
 ## 2. 目录结构
 
@@ -30,7 +31,7 @@
 ├── docs/                              # 项目文档（重构规划、WASM 可行性报告、素材清单）
 ├── README.md                          # 项目介绍与快速开始
 ├── .github/workflows/deploy.yml       # GitHub Pages 自动部署
-└── agents.md                          # 本文件
+└── AGENTS.md                          # 本文件
 ```
 
 > 仓库瘦身说明（2026-10-03）：已删除官方 Java 源码 `openrocket/`（约 745M，素材已全部入库 `public/ork-assets/`，需要时从 https://github.com/openrocket/openrocket 重新 clone）、WASM 实验工具链 `tools/`（JDK/Maven，约 479M，本地 Java 方案已弃用）、WASM 可行性 PoC `phase0-poc/`（编译产物已入库 `public/wasm/`）、`node_modules/` 与 `dist/`（可分别用 `npm ci` / `npm run build` 重建）。仓库总体积 1.4G → 21M → 12M。
@@ -40,8 +41,8 @@
 ### 数据与几何（`src/lib/`）
 
 - `types.ts` — `RocketComponent` / `RocketModel` 结构定义。
-- `geometry.ts` — **核心几何引擎** `layoutRocket(root)`：把组件树展开为 `GeoSeg[]`（每段含 z0/z1/r0/r1/depth）。轴向语义对齐官方（见 §5），半径继承：同 stage 无显式半径直系组件继承前一身体组件半径。
-- `componentFactory.ts` — `makeComponent(type, params)`：按类型构造组件；`ComponentParams` 支持 `axialOffset` / `axialMethod`（'after' 等）。
+- `geometry.ts` — **核心几何引擎** `layoutRocket(root)`：把组件树展开为 `GeoSeg[]`（每段含 z0/z1/r0/r1/depth）。轴向语义对齐官方（见 §5），半径继承：同 stage 无显式半径直系组件继承前一身体组件半径。**并联级**：boosters/pods 为并行容器（不产生自身段），其子级自鼻端布局并带 `xOff` 侧向偏移（主级最大半径 + 2mm 间隙，多个并联体依次右排）。
+- `componentFactory.ts` — `makeComponent(type, params)`：按类型构造组件；`ComponentParams` 支持 `axialOffset` / `axialMethod`（'after' 等）。已覆盖全部官方组件类型（含 stage/boosters/pods/railbutton/tubefinset）。
 - `presets.ts` — 6 个内置示例；`makeFin()` 辅助函数 = 尾翼根部覆盖管尾（AFTER + 负偏移，等效官方 BOTTOM）。
 - `engines.ts` — 26 款内置发动机（Estes 全系，规格来自 Estes Engine Chart + ThrustCurve 认证值）；`parseEngFile()` 支持用户导入 .eng。
 - `orkParser.ts` — 解析官方 .ork（ZIP，内部 JSZip 解压，node 环境需注入 `@xmldom/xmldom` 的 DOMParser）。
@@ -101,12 +102,14 @@ npm run gen:thumbs # 重生成示例缩略图（改 presets/geometry 后必须�
 ### 已完成（近期主线）
 
 - 尾翼轴向：makeFin 全覆盖管尾（6 内置示例全部对齐）
+- 尾翼外形：2D/3D 按梯形（多边形）/椭圆（Q 曲线）/自由（点序列剪式）/管翼（矩形）四种外形渲染
+- 组件全覆盖：boosters/pods 并联级布局（GeoSeg.xOff）、railbutton、tubefinset 全部可创建，组件库无"即将支持"
 - 发动机库 8 → 26 款（A3/A8/B4/B6/C6/C11/D12/E9/E12/F15 各延迟变体），D12 直径修正为 24mm
 - 伞/飘带回归机身管内前段（bodytube 子组件 + offset）
 - 3D 部件程序化材质纹理（碳纤维/拉丝/玻纤/布料）
 - CG/CP 标记 tooltip（2D SVG + 3D Canvas 命中检测）
 - GitHub Pages 自动部署 workflow（已提交，**待用户 push + 在仓库 Settings→Pages 开启 GitHub Actions**）
-- 资源全部改为 BASE_URL 相对路径（子路径部署不 404）
+- 资源全部改为 BASE_URL 相对路径（子路径部署不 404；组件图标已修复）
 
 ### 待办（按优先级）
 

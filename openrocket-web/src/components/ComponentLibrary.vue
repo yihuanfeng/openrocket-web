@@ -20,8 +20,8 @@ const GROUPS: { title: string; en: string; items: LibItem[] }[] = [
     title: '装配', en: 'Assembly',
     items: [
       { code: 'stage', zh: '级', en: 'Stage', desc: '火箭的基本框架，至少一级', supported: true, icon: 'stage' },
-      { code: 'boosters', zh: '助推器', en: 'Boosters', desc: '可分离的并联助推级', supported: false, icon: 'boosters' },
-      { code: 'pods', zh: '捆绑舱', en: 'Pods', desc: '不可分离的侧挂舱（如侧挂电机）', supported: false, icon: 'pods' },
+      { code: 'boosters', zh: '助推器', en: 'Boosters', desc: '可分离的并联助推级', supported: true, icon: 'boosters' },
+      { code: 'pods', zh: '捆绑舱', en: 'Pods', desc: '不可分离的侧挂舱（如侧挂电机）', supported: true, icon: 'pods' },
     ],
   },
   {
@@ -33,8 +33,9 @@ const GROUPS: { title: string; en: string; items: LibItem[] }[] = [
       { code: 'trapezoidfinset', zh: '梯形尾翼', en: 'Trapezoidal Fin', desc: '默认 3 片，保证稳定', supported: true, icon: 'trapezoidfin' },
       { code: 'ellipticalfinset', zh: '椭圆尾翼', en: 'Elliptical Fin', desc: '椭圆外形的尾翼组', supported: true, icon: 'ellipticalfin' },
       { code: 'freeformfinset', zh: '自由尾翼', en: 'Freeform Fin', desc: '自定义任意外形', supported: true, icon: 'freeformfin' },
+      { code: 'tubefinset', zh: '管尾翼', en: 'Tube Fin', desc: '环绕管组（如集束管）', supported: true, icon: 'tubefin' },
       { code: 'launchlug', zh: '发射导环', en: 'Launch Lug', desc: '套在发射杆上的导环', supported: true, icon: 'launchlug' },
-      { code: 'railbutton', zh: '导轨按钮', en: 'Rail Button', desc: '轨道发射导轨按钮', supported: false, icon: 'railbutton' },
+      { code: 'railbutton', zh: '导轨按钮', en: 'Rail Button', desc: '轨道发射导轨按钮', supported: true, icon: 'railbutton' },
     ],
   },
   {

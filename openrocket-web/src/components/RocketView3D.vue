@@ -178,7 +178,7 @@ function buildTris(): Tri[] {
     }
   };
   for (const s of segs.value) {
-    if (s.kind !== 'tubefinset') segAdd(s, s.z0, s.z1, s.r0, s.r1);
+    if (s.kind !== 'tubefinset') segAdd(s, s.z0, s.z1, s.r0, s.r1, s.xOff ?? 0, 0);
     if (s.kind === 'tubefinset') {
       // 管翼：N 根小管环绕（官方相切布局），每根画为偏移圆柱
       const count = Math.max(parseInt(propNum(s.comp, 'fincount', 6).toString(), 10) || 6, 1);
@@ -187,46 +187,56 @@ function buildTris(): Tri[] {
       // 管中心距 = bodyR + tubeR（官方相切）；parentR 用 6 管相切公式反推（bodyR = tubeR*sin(π/n)/(1-sin) 的逆用：近似 2*tubeR 对 n=6）
       const parentR = count === 6 ? tubeR : tubeR * (1 - Math.sin(Math.PI / count)) / Math.sin(Math.PI / count);
       const centerD = parentR + tubeR;
+      const xOff = s.xOff ?? 0;
       const angle0 = (parseFloat(s.comp.properties?.['angleoffset'] ?? '') || 0) * Math.PI / 180;
       for (let f = 0; f < count; f++) {
         const th = angle0 + (f / count) * Math.PI * 2;
-        segAdd(s, s.z0, s.z1, tubeR, tubeR, (rr + centerD - tubeR) * Math.cos(th), (rr + centerD - tubeR) * Math.sin(th));
+        segAdd(s, s.z0, s.z1, tubeR, tubeR, xOff + (rr + centerD - tubeR) * Math.cos(th), (rr + centerD - tubeR) * Math.sin(th));
       }
     } else if (s.kind.includes('fin')) {
       const h = Math.max(propNum(s.comp, 'height', 0.05), 0);
       const count = Math.max(parseInt(propNum(s.comp, 'fincount', 3).toString(), 10) || 3, 1);
       const rootc = Math.max(propNum(s.comp, 'rootchord', s.z1 - s.z0), 0.001);
-      const tipc = Math.max(propNum(s.comp, 'tipchord', rootc * 0.8), 0.001);
-      const sweep = Math.max(propNum(s.comp, 'sweep', 0), 0);
       const sel = s.comp === props.selected;
       const rr = Math.max(s.r0, s.r1, 0.001);
+      // 翼面轮廓点集（[弦向因子 fx, 翼高因子 fy]），按尾翼类型区分（OpenRocket 外形语义）
+      const outline: Array<[number, number]> = [];
+      if (s.kind === 'ellipticalfinset') {
+        const n = 10;
+        for (let i = 0; i <= n; i++) outline.push([i / n, Math.sin(Math.PI * i / n)]);
+      } else if (s.kind === 'freeformfinset') {
+        const raw = String(s.comp.properties['points'] ?? '');
+        const def: Array<[number, number]> = [[0, 0], [0.12, 0.6], [0.28, 1], [0.62, 1], [0.86, 0.55], [1, 0]];
+        let pts: Array<[number, number]> = def;
+        if (raw) {
+          const arr = raw.split(';').map((p) => {
+            const [x, y] = p.split(',').map(parseFloat);
+            return [x, y];
+          }).filter((p) => p.length === 2 && p.every(Number.isFinite)) as Array<[number, number]>;
+          if (arr.length >= 3) pts = arr;
+        }
+        outline.push(...pts);
+      } else {
+        const tipc = Math.max(propNum(s.comp, 'tipchord', rootc * 0.8), 0.001);
+        const sweep = Math.max(propNum(s.comp, 'sweep', 0), 0);
+        outline.push([0, 0], [Math.min(sweep / rootc, 0.8), 1], [Math.min((sweep + tipc) / rootc, 1), 1], [1, 0]);
+      }
+      const t = Math.max(propNum(s.comp, 'thickness', 0.003), 0.0005);
       for (let f = 0; f < count; f++) {
         const th = (f / count) * Math.PI * 2;
         const cos = Math.cos(th), sin = Math.sin(th);
-        const px = (r: number) => [rr * cos + r * cos, rr * sin + r * sin] as [number, number];
-        // 前缘（带后掠）、后缘（带锥度）——梯形翼立体
-        const tipStart = Math.min(s.z0 + sweep, s.z0 + rootc * 0.8);
-        const tipEnd = Math.min(tipStart + tipc, s.z0 + rootc);
-        // 四个角点（翼根前/后、翼尖前/后）
-        const a: [number, number, number] = [...px(0), s.z0];          // 根前
-        const b: [number, number, number] = [...px(h), tipStart];      // 尖前（后掠）
-        const c: [number, number, number] = [...px(h), tipEnd];        // 尖后（锥度）
-        const d: [number, number, number] = [...px(0), s.z0 + rootc];  // 根后
-        const light = 0.5 + 0.4 * Math.abs(cos);
-        addQuad(a, b, c, d, s, light, sel);
-        // 翼板厚度（薄板）
-        const t = Math.max(propNum(s.comp, 'thickness', 0.003), 0.0005);
         const nx = Math.sin(th), ny = -Math.cos(th); // 翼面法线方向
-        const a2: [number, number, number] = [a[0] + nx * t, a[1] + ny * t, a[2]];
-        const b2: [number, number, number] = [b[0] + nx * t, b[1] + ny * t, b[2]];
-        const c2: [number, number, number] = [c[0] + nx * t, c[1] + ny * t, c[2]];
-        const d2: [number, number, number] = [d[0] + nx * t, d[1] + ny * t, d[2]];
-        addQuad(a2, b2, c2, d2, s, light * 0.85, sel);
+        const light = 0.5 + 0.4 * Math.abs(cos);
+        // 轮廓 3D 点（翼面外侧 + 厚度偏移侧）
+        const xOff = s.xOff ?? 0;
+        const P: Array<[number, number, number]> = outline.map(([fx, fy]) => [xOff + rr * cos + h * fy * cos, rr * sin + h * fy * sin, s.z0 + fx * rootc]);
+        const P2: Array<[number, number, number]> = P.map((p) => [p[0] + nx * t, p[1] + ny * t, p[2]]);
+        // 上表面（以根前点为扇心的三角扇）
+        for (let i = 1; i < P.length - 1; i++) addQuad(P[0], P[i], P[i + 1], P[i + 1], s, light, sel);
+        // 下表面（法线反向）
+        for (let i = 1; i < P2.length - 1; i++) addQuad(P2[i + 1], P2[i], P2[0], P2[0], s, light * 0.85, sel);
         // 侧边（薄板边缘）
-        addQuad(a, b, b2, a2, s, light * 0.7, sel);
-        addQuad(c, d, d2, c2, s, light * 0.7, sel);
-        addQuad(b, c, c2, b2, s, light * 0.9, sel);
-        addQuad(a, d, d2, a2, s, light * 0.9, sel);
+        for (let i = 0; i < P.length - 1; i++) addQuad(P[i], P[i + 1], P2[i + 1], P2[i], s, light * 0.7, sel);
       }
     }
   }
