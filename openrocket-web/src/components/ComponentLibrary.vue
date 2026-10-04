@@ -2,6 +2,9 @@
 // 组件库（设计 Tab 右侧）：OpenRocket 官方 4 类分区 + 官方图标
 const emit = defineEmits<{ add: [type: string] }>();
 
+// GitHub Pages 子路径部署：资源统一走相对 BASE_URL
+const base = import.meta.env.BASE_URL;
+
 /** 官方图标文件名（component-icons/*-large.png） */
 interface LibItem {
   code: string;        // 组件类型码
@@ -76,7 +79,7 @@ function click(item: LibItem): void {
         :title="item.supported ? item.desc : item.desc + '（Web 版当前未开放）'"
         @click="click(item)"
       >
-        <span class="li-icon"><img :src="`/ork-assets/component-icons/${item.icon}-large.png`" :alt="item.en" draggable="false" /></span>
+        <span class="li-icon"><img :src="`${base}ork-assets/component-icons/${item.icon}-large.png`" :alt="item.en" draggable="false" /></span>
         <span class="li-text">
           <span class="li-name">
             {{ item.zh }}

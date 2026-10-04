@@ -27,6 +27,9 @@ const emit = defineEmits<{
   dragend: [];
 }>();
 
+// GitHub Pages 子路径部署：资源统一走相对 BASE_URL
+const base = import.meta.env.BASE_URL;
+
 const ICON: Record<string, string> = {
   rocket: 'stage', stage: 'stage', boosters: 'boosters', podset: 'pods', pods: 'pods',
   nosecone: 'nosecone', bodytube: 'bodytube', transition: 'transition',
@@ -37,7 +40,7 @@ const ICON: Record<string, string> = {
   parachute: 'parachute', streamer: 'streamer', shockcord: 'shockcord', masscomponent: 'mass',
 };
 function iconOf(c: RocketComponent): string {
-  return `/ork-assets/component-icons/${ICON[c.type] ?? 'stage'}-small.png`;
+  return `${base}ork-assets/component-icons/${ICON[c.type] ?? 'stage'}-small.png`;
 }
 const typeLabels: Record<string, string> = {
   rocket: '火箭', stage: '级', boosters: '助推器', podset: '捆绑舱',
