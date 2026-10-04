@@ -45,34 +45,43 @@ function clsOf(kind: string): Tri['cls'] {
 }
 
 const COLORS: Record<string, [string, string, string]> = {
-  // [高光, 主色, 阴影]
-  nosecone: ['#6db9ff', '#0a84ff', '#0057b8'],
-  bodytube: ['#8ec8ff', '#2f8bff', '#0a54c8'],
-  transition: ['#9ad2ff', '#3f97ff', '#0a5cd6'],
-  trapezoidfinset: ['#4da3ff', '#0a5cd6', '#062a66'],
-  ellipticalfinset: ['#4da3ff', '#0a5cd6', '#062a66'],
-  finset: ['#4da3ff', '#0a5cd6', '#062a66'],
-  innertube: ['#a8d8ff', '#5aa7ff', '#1a66cc'],
-  enginemount: ['#a8d8ff', '#5aa7ff', '#1a66cc'],
-  engineblock: ['#a8d8ff', '#5aa7ff', '#1a66cc'],
-  launchlug: ['#8ec8ff', '#2f8bff', '#0a54c8'],
-  railbutton: ['#8ec8ff', '#2f8bff', '#0a54c8'],
-  parachute: ['#ffd9a0', '#ffb34d', '#c97b0a'],
+  // [高光, 主色, 阴影] —— 按真实火箭部件差异化配色
+  nosecone: ['#ffffff', '#e9eff7', '#a8b8cc'],          // 白色玻纤头锥（亮漆）
+  bodytube: ['#f4f7fb', '#dce4ee', '#94a3b8'],          // 白/浅灰玻纤机身管
+  transition: ['#e6edf5', '#c2cfdd', '#7e8fa5'],        // 金属银过渡段
+  trapezoidfinset: ['#ffa878', '#f4673a', '#a33a16'],   // 橙红漆尾翼
+  ellipticalfinset: ['#ffa878', '#f4673a', '#a33a16'],
+  freeformfinset: ['#ffa878', '#f4673a', '#a33a16'],
+  finset: ['#ffa878', '#f4673a', '#a33a16'],
+  tubefinset: ['#d7e1ec', '#b3c2d3', '#7b8a9d'],        // 银灰管尾翼
+  launchlug: ['#6a7484', '#424c5c', '#20262f'],         // 黑塑料导轨块
+  railbutton: ['#6a7484', '#424c5c', '#20262f'],        // 黑塑料导轨按钮
+  parachute: ['#ff8080', '#e04545', '#8c1f1f'],         // 红色回收伞
+  streamer: ['#ffc46b', '#e8932c', '#995b0e'],          // 橙黄飘带
+  shockcord: ['#f5efe0', '#dcd2ba', '#a89c80'],         // 米白减震绳
+  masscomponent: ['#b8c4d2', '#8a97a8', '#56626f'],     // 金属配重
+  innertube: ['#d7e1ec', '#b3c2d3', '#7b8a9d'],         // 金属内管
+  enginemount: ['#d7e1ec', '#b3c2d3', '#7b8a9d'],       // 金属发动机座
+  engineblock: ['#d7e1ec', '#b3c2d3', '#7b8a9d'],       // 金属挡块
+  tubecoupler: ['#d7e1ec', '#b3c2d3', '#7b8a9d'],       // 金属管接头
+  bulkhead: ['#d7e1ec', '#b3c2d3', '#7b8a9d'],          // 金属隔框
+  centeringring: ['#d7e1ec', '#b3c2d3', '#7b8a9d'],     // 金属定心环
+  engine: ['#eef2f7', '#c8d3e0', '#7e8fa5'],            // 银金属发动机
 };
 
 function triColor(seg: Seg, light: number): string {
   const base = COLORS[seg.kind] ?? ['#8ec8ff', '#2f8bff', '#0a54c8'];
   const [hi, mid, lo] = base;
-  // light: 0~1 → 阴影~高光 之间插值（三通道分别插值，保持蓝色系）
+  // light: 0~1 → 阴影~高光 之间插值（允许轻微过曝，钳制 255）
   const ch3 = (a: string, b: string, t: number) => [
-    Math.round(parseInt(a.slice(1, 3), 16) + (parseInt(b.slice(1, 3), 16) - parseInt(a.slice(1, 3), 16)) * t),
-    Math.round(parseInt(a.slice(3, 5), 16) + (parseInt(b.slice(3, 5), 16) - parseInt(a.slice(3, 5), 16)) * t),
-    Math.round(parseInt(a.slice(5, 7), 16) + (parseInt(b.slice(5, 7), 16) - parseInt(a.slice(5, 7), 16)) * t),
+    Math.min(255, Math.round(parseInt(a.slice(1, 3), 16) + (parseInt(b.slice(1, 3), 16) - parseInt(a.slice(1, 3), 16)) * t)),
+    Math.min(255, Math.round(parseInt(a.slice(3, 5), 16) + (parseInt(b.slice(3, 5), 16) - parseInt(a.slice(3, 5), 16)) * t)),
+    Math.min(255, Math.round(parseInt(a.slice(5, 7), 16) + (parseInt(b.slice(5, 7), 16) - parseInt(a.slice(5, 7), 16)) * t)),
   ];
   let ca = lo, cb = mid;
   if (light > 0.5) { ca = mid; cb = hi; }
   const t = light > 0.5 ? (light - 0.5) * 2 : light * 2;
-  return `rgb(${ch3(ca, cb, t).join(',')})`;
+  return `rgb(${ch3(ca, cb, Math.min(t, 1.2)).join(',')})`;
 }
 /** 按倍率压暗/提亮 rgb 颜色（f<1 变暗，f>1 变亮） */
 function scaleRGB(rgb: string, f: number): string {
@@ -84,37 +93,44 @@ function scaleRGB(rgb: string, f: number): string {
 
 // —— 程序化表面材质（半透明纹理叠加在光照色上，保留明暗与部件主色）——
 const PAT_DEFS: Record<string, (c: CanvasRenderingContext2D, s: number) => void> = {
-  // 碳纤维：45° 斜纹编织（白高光 + 黑阴影线，密织）
+  // 金属：宽水平亮带 + 细磨砂颗粒（大块质感，非细密线）
+  metal(c, s) {
+    c.fillStyle = 'rgba(255,255,255,0.20)';
+    c.fillRect(0, 0, s, 10);
+    c.fillStyle = 'rgba(255,255,255,0.10)';
+    c.fillRect(0, 22, s, 6);
+    c.fillStyle = 'rgba(0,0,0,0.16)';
+    c.fillRect(0, 40, s, 8);
+    // 颗粒噪点（少量圆点）
+    c.fillStyle = 'rgba(255,255,255,0.12)';
+    for (let i = 0; i < 6; i++) { c.beginPath(); c.arc((i * 13 + 5) % s, (i * 9 + 3) % s, 1.2, 0, Math.PI * 2); c.fill(); }
+  },
+  // 碳纤维：菱形编织格（粗交叉带 + 深色格底）
   carbon(c, s) {
-    c.strokeStyle = 'rgba(255,255,255,0.32)';
-    c.lineWidth = 1.2;
-    for (let i = -s; i < s * 2; i += 6) { c.beginPath(); c.moveTo(i, 0); c.lineTo(i + s, s); c.stroke(); }
-    c.strokeStyle = 'rgba(0,0,0,0.42)';
-    for (let i = -s; i < s * 2; i += 6) { c.beginPath(); c.moveTo(i + 3, 0); c.lineTo(i + 3 + s, s); c.stroke(); }
+    c.fillStyle = 'rgba(0,0,0,0.22)';
+    c.fillRect(0, 0, s, s);
+    c.strokeStyle = 'rgba(255,255,255,0.30)';
+    c.lineWidth = 3;
+    for (let i = -s; i < s * 2; i += 16) { c.beginPath(); c.moveTo(i, 0); c.lineTo(i + s, s); c.stroke(); }
+    c.strokeStyle = 'rgba(0,0,0,0.45)';
+    for (let i = -s; i < s * 2; i += 16) { c.beginPath(); c.moveTo(i + 8, 0); c.lineTo(i + 8 + s, s); c.stroke(); }
   },
-  // 金属拉丝：细水平磨砂线（更密更亮）
-  brushed(c, s) {
-    for (let y = 0; y < s; y += 2.5) {
-      c.fillStyle = y % 5 === 0 ? 'rgba(255,255,255,0.24)' : 'rgba(0,0,0,0.18)';
-      c.fillRect(0, y, s, 1.4);
-    }
-  },
-  // 布料：经纬细网格（密织）
+  // 布料：稀疏大方格缝线
   fabric(c, s) {
-    c.strokeStyle = 'rgba(255,255,255,0.36)';
-    c.lineWidth = 1.1;
-    for (let i = 0; i <= s; i += 6) {
+    c.strokeStyle = 'rgba(255,255,255,0.35)';
+    c.lineWidth = 2;
+    for (let i = 0; i <= s; i += 16) {
       c.beginPath(); c.moveTo(i, 0); c.lineTo(i, s); c.stroke();
       c.beginPath(); c.moveTo(0, i); c.lineTo(s, i); c.stroke();
     }
   },
-  // 玻纤光泽：横向高光带（模拟曲面反射，加强）
+  // 亮漆：宽高光带（模拟清漆光泽）
   gloss(c, s) {
     const g = c.createLinearGradient(0, 0, s, 0);
     g.addColorStop(0, 'rgba(255,255,255,0)');
-    g.addColorStop(0.3, 'rgba(255,255,255,0.5)');
-    g.addColorStop(0.48, 'rgba(255,255,255,0.06)');
-    g.addColorStop(0.66, 'rgba(255,255,255,0.4)');
+    g.addColorStop(0.25, 'rgba(255,255,255,0.40)');
+    g.addColorStop(0.5, 'rgba(255,255,255,0.05)');
+    g.addColorStop(0.75, 'rgba(255,255,255,0.32)');
     g.addColorStop(1, 'rgba(255,255,255,0)');
     c.fillStyle = g;
     c.fillRect(0, 0, s, s);
@@ -122,26 +138,27 @@ const PAT_DEFS: Record<string, (c: CanvasRenderingContext2D, s: number) => void>
 };
 // 部件 → 材质 + 叠加透明度
 const MAT_MAP: Record<string, { pat?: string; a: number }> = {
-  nosecone: { pat: 'gloss', a: 0.62 },
-  bodytube: { pat: 'carbon', a: 0.52 },
-  transition: { pat: 'brushed', a: 0.48 },
-  trapezoidfinset: { pat: 'carbon', a: 0.42 },
-  ellipticalfinset: { pat: 'carbon', a: 0.42 },
-  freeformfinset: { pat: 'carbon', a: 0.42 },
-  finset: { pat: 'carbon', a: 0.42 },
-  tubefinset: { pat: 'brushed', a: 0.4 },
-  launchlug: { pat: 'gloss', a: 0.4 },
-  railbutton: { pat: 'gloss', a: 0.4 },
-  parachute: { pat: 'fabric', a: 0.62 },
-  streamer: { pat: 'fabric', a: 0.62 },
-  shockcord: { pat: 'fabric', a: 0.4 },
-  masscomponent: { pat: 'brushed', a: 0.35 },
-  innertube: { pat: 'brushed', a: 0.35 },
-  enginemount: { pat: 'brushed', a: 0.35 },
-  engineblock: { pat: 'brushed', a: 0.35 },
-  tubecoupler: { pat: 'brushed', a: 0.35 },
-  bulkhead: { pat: 'brushed', a: 0.35 },
-  centeringring: { pat: 'brushed', a: 0.35 },
+  nosecone: { pat: 'gloss', a: 0.42 },
+  bodytube: { pat: 'gloss', a: 0.3 },
+  transition: { pat: 'metal', a: 0.38 },
+  trapezoidfinset: { pat: 'gloss', a: 0.28 },
+  ellipticalfinset: { pat: 'gloss', a: 0.28 },
+  freeformfinset: { pat: 'gloss', a: 0.28 },
+  finset: { pat: 'gloss', a: 0.28 },
+  tubefinset: { pat: 'metal', a: 0.34 },
+  launchlug: { pat: 'metal', a: 0.22 },
+  railbutton: { pat: 'metal', a: 0.22 },
+  parachute: { pat: 'fabric', a: 0.5 },
+  streamer: { pat: 'fabric', a: 0.5 },
+  shockcord: { pat: 'fabric', a: 0.3 },
+  masscomponent: { pat: 'metal', a: 0.32 },
+  innertube: { pat: 'metal', a: 0.3 },
+  enginemount: { pat: 'metal', a: 0.3 },
+  engineblock: { pat: 'metal', a: 0.3 },
+  tubecoupler: { pat: 'metal', a: 0.3 },
+  bulkhead: { pat: 'metal', a: 0.3 },
+  centeringring: { pat: 'metal', a: 0.3 },
+  engine: { pat: 'metal', a: 0.4 },
 };
 const patCache = new Map<string, CanvasPattern | null>();
 function getPat(kind: string, ctx: CanvasRenderingContext2D): CanvasPattern | null {
@@ -186,12 +203,15 @@ function buildTris(): Tri[] {
     for (let i = 0; i < rings.length - 1; i++) {
       for (let j = 0; j < N; j++) {
         const j2 = (j + 1) % N;
-        // 圆周方向光照：面向观察者一侧亮
+        // 圆周方向光照：面向观察者一侧亮；高光区域叠加镜面峰值
         const ang = (j / N) * Math.PI * 2 + 0.5;
-        const light = 0.42 + 0.58 * Math.pow(Math.abs(Math.cos(ang)), 0.8);
+        const cAng = Math.abs(Math.cos(ang));
+        let light = 0.4 + 0.6 * Math.pow(cAng, 1.4);
+        if (cAng > 0.82) light += (cAng - 0.82) * 2.4; // 镜面高光
+        if (cAng < 0.2) light -= (0.2 - cAng) * 0.6; // 底部反光压暗
         // 轴向高光：沿长度方向渐变（前段稍亮）
         const axial = 1 - 0.22 * ((z0 + z1) / 2 / Math.max(total.value, 0.001));
-        addQuad(rings[i][j], rings[i][j2], rings[i + 1][j2], rings[i + 1][j], s, light * axial, sel);
+        addQuad(rings[i][j], rings[i][j2], rings[i + 1][j2], rings[i + 1][j], s, Math.min(light * axial, 1.5), sel);
       }
     }
   };
@@ -244,7 +264,10 @@ function buildTris(): Tri[] {
         const th = (f / count) * Math.PI * 2;
         const cos = Math.cos(th), sin = Math.sin(th);
         const nx = Math.sin(th), ny = -Math.cos(th); // 翼面法线方向
-        const light = 0.5 + 0.4 * Math.abs(cos);
+        // 翼面光照：正对观察者更亮 + 镜面高光
+        const cAng = Math.abs(cos);
+        let light = 0.45 + 0.5 * Math.pow(cAng, 1.3);
+        if (cAng > 0.85) light += (cAng - 0.85) * 1.8;
         // 轮廓 3D 点（翼面外侧 + 厚度偏移侧）
         const xOff = s.xOff ?? 0;
         const P: Array<[number, number, number]> = outline.map(([fx, fy]) => [xOff + rr * cos + h * fy * cos, rr * sin + h * fy * sin, s.z0 + fx * rootc]);
@@ -335,25 +358,19 @@ function draw(): void {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
 
-  // 背景：深蓝径向渐变（Apple 科技感）
+  // 背景：深蓝径向渐变（Apple 科技感）+ 底部柔光晕
   const g = ctx.createRadialGradient(w / 2, h * 0.42, 10, w / 2, h * 0.55, Math.max(w, h) * 0.75);
   g.addColorStop(0, '#123a7a');
   g.addColorStop(0.55, '#0a2b66');
   g.addColorStop(1, '#071a45');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
-
-  // 细网格（透视收敛感）
+  const g2 = ctx.createRadialGradient(w * 0.5, h * 0.28, 0, w * 0.5, h * 0.28, Math.max(w, h) * 0.5);
+  g2.addColorStop(0, 'rgba(90,150,255,0.16)');
+  g2.addColorStop(1, 'rgba(90,150,255,0)');
+  ctx.fillStyle = g2;
+  ctx.fillRect(0, 0, w, h);
   const cxp = w / 2, cyp = h * 0.46;
-  ctx.strokeStyle = 'rgba(125,185,255,0.10)';
-  ctx.lineWidth = 1;
-  for (let i = -14; i <= 14; i++) {
-    ctx.beginPath(); ctx.moveTo(cxp + i * 24, 0); ctx.lineTo(cxp + i * 24 * 1.6, h); ctx.stroke();
-  }
-  for (let i = 0; i <= 10; i++) {
-    const yy = cyp + i * 30;
-    ctx.beginPath(); ctx.moveTo(0, yy); ctx.lineTo(w, yy); ctx.stroke();
-  }
 
   const tris = buildTris();
   const maxZ = total.value;
@@ -452,8 +469,8 @@ function draw(): void {
         ctx.stroke();
         ctx.shadowBlur = 0;
       } else {
-        // 弱化描边：去掉网格线框感，保留轻微部件边界
-        ctx.strokeStyle = 'rgba(255,255,255,0.045)';
+        // 极弱描边：仅保留选中高亮，普通状态几乎无线条感
+        ctx.strokeStyle = 'rgba(255,255,255,0.02)';
         ctx.lineWidth = 0.5;
         ctx.stroke();
       }
