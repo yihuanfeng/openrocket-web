@@ -41,6 +41,8 @@ export const PRESETS: Preset[] = [
       const s = stage('Stage 1');
       const bt = makeComponent('bodytube', { length: 0.3, radius: 0.02 });
       bt.children.push(makeComponent('parachute', { axialOffset: 0.08 })); // 回收舱：机身管内前段
+      // 发动机架管：机身管子组件、贴管底（BOTTOM 语义），18mm 座径装 Estes 18mm 标准发动机
+      bt.children.push(makeComponent('innertube', { length: 0.09, radius: 0.009, axialMethod: 'bottom' }));
       s.children.push(
         makeComponent('nosecone', { length: 0.12, radius: 0.02, shape: 'ogive' }),
         bt,

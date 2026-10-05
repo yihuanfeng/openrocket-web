@@ -127,11 +127,12 @@ export function layoutRocket(root: RocketComponent): GeoSeg[] {
     let pcursor = 0;
     for (const c of par.children ?? []) {
       const len = lenOf(c);
+      const m = c.axialMethod ?? '';
       let pos: number;
-      if (isNaN(c.axialOffset)) {
-        pos = pcursor;
-      } else if ((c.axialMethod ?? '') === 'after') {
-        pos = pcursor + c.axialOffset;
+      if (m === 'after') {
+        pos = pcursor + (isNaN(c.axialOffset) ? 0 : c.axialOffset);
+      } else if (m === '') {
+        pos = isNaN(c.axialOffset) ? pcursor : axialPos(c, len, Math.max(parEstLen(par), len));
       } else {
         pos = axialPos(c, len, Math.max(parEstLen(par), len));
       }
@@ -209,13 +210,14 @@ export function layoutRocket(root: RocketComponent): GeoSeg[] {
     let prevBodyR = 0;
     for (const c of stage.children) {
       const len = lenOf(c);
+      const m = c.axialMethod ?? '';
       let pos: number;
-      if (isNaN(c.axialOffset)) {
-        pos = cursor - sBase; // AFTER：自动接续
-      } else if ((c.axialMethod ?? '') === 'after') {
-        pos = (cursor - sBase) + c.axialOffset; // AFTER + 偏移：相对前一组件尾端（官方 previous+offset）
+      if (m === 'after') {
+        pos = (cursor - sBase) + (isNaN(c.axialOffset) ? 0 : c.axialOffset); // AFTER + 偏移：相对前一组件尾端
+      } else if (m === '') {
+        pos = isNaN(c.axialOffset) ? cursor - sBase : axialPos(c, len, estLen); // 无方法：自动接续 / 显式偏移按 top
       } else {
-        pos = axialPos(c, len, estLen);
+        pos = axialPos(c, len, estLen); // bottom/middle/top/absolute（offset NaN 按 0）
       }
       const z0 = sBase + pos;
       const z1 = z0 + len;
@@ -229,13 +231,14 @@ export function layoutRocket(root: RocketComponent): GeoSeg[] {
       // 子组件（内部件/挂件/尾翼）：父 = 本组件，outerLen = 本组件长度
       for (const ch of c.children ?? []) {
         const clen = lenOf(ch);
+        const cm = ch.axialMethod ?? '';
         let cpos: number;
-        if (isNaN(ch.axialOffset)) {
-          cpos = len; // AFTER 子组件：父尾端
-        } else if ((ch.axialMethod ?? '') === 'after') {
-          cpos = len + ch.axialOffset; // AFTER + 偏移：父尾端 + offset
+        if (cm === 'after') {
+          cpos = len + (isNaN(ch.axialOffset) ? 0 : ch.axialOffset); // AFTER + 偏移：父尾端 + offset
+        } else if (cm === '') {
+          cpos = isNaN(ch.axialOffset) ? len : axialPos(ch, clen, len); // 无方法：父尾端 / 显式偏移按 top
         } else {
-          cpos = axialPos(ch, clen, len);
+          cpos = axialPos(ch, clen, len); // bottom/middle/top/absolute（offset NaN 按 0）
         }
         const cz0 = z0 + cpos;
         const cr = radiusOf(ch, r1);
