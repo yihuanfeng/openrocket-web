@@ -2,11 +2,13 @@
 // 发动机配置 Tab：对齐 OpenRocket Motors & Configuration 页
 // 左：飞行配置列表；右：Motor mounts + 电机选择 + 点火方式
 import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { RocketComponent } from '../lib/types';
 import type { MotorSpec } from '../lib/engines';
 
 interface FlightConfig { id: string; name: string; motorId: string; }
 
+const { t } = useI18n();
 const props = defineProps<{
   configs: FlightConfig[];
   currentConfigId: string;
@@ -79,7 +81,7 @@ function classOf(m: MotorSpec): string {
     <!-- 左：飞行配置列表 -->
     <aside class="mcp-left" :style="{ width: mcpLeftW + 'px' }">
       <div class="mcp-head">
-        <span class="mcp-title">飞行配置</span>
+        <span class="mcp-title">{{ t('mcp.flightConfig') }}</span>
         <span class="mcp-sub">Flight Configurations</span>
       </div>
       <div class="cfg-list">
@@ -107,12 +109,12 @@ function classOf(m: MotorSpec): string {
         </div>
       </div>
       <div class="cfg-ops">
-        <button class="cfg-btn" title="新建配置（复制当前发动机）" @click="emit('newConfig')">＋ 新建</button>
-        <button class="cfg-btn" :disabled="configs.length <= 1" title="删除当前配置" @click="emit('deleteConfig')">－ 删除</button>
-        <button class="cfg-btn" :disabled="!currentConfigId" title="重命名当前配置" @click="startRename(configs.find((c) => c.id === currentConfigId) ?? configs[0])">✎ 重命名</button>
-        <button class="cfg-btn" title="复制当前配置" @click="emit('copyConfig')">⧉ 复制</button>
+        <button class="cfg-btn" :title="t('mcp.newCfg')" @click="emit('newConfig')">＋ {{ t('mcp.new') }}</button>
+        <button class="cfg-btn" :disabled="configs.length <= 1" :title="t('mcp.delCfg')" @click="emit('deleteConfig')">－ {{ t('mcp.delete') }}</button>
+        <button class="cfg-btn" :disabled="!currentConfigId" :title="t('mcp.renameCfg')" @click="startRename(configs.find((c) => c.id === currentConfigId) ?? configs[0])">✎ {{ t('mcp.rename') }}</button>
+        <button class="cfg-btn" :title="t('mcp.copyCfg')" @click="emit('copyConfig')">⧉ {{ t('mcp.copy') }}</button>
       </div>
-      <p class="mcp-tip">配置 = 发动机选择方案；切换配置即切换仿真发动机。</p>
+      <p class="mcp-tip">{{ t('mcp.tip') }}</p>
     </aside>
 
     <!-- 分隔条：拖拽调整配置列表宽度 -->
@@ -121,45 +123,45 @@ function classOf(m: MotorSpec): string {
     <!-- 右：Motor mounts + Select motor -->
     <section class="mcp-right">
       <div class="mcp-head">
-        <span class="mcp-title">电机安装与选择</span>
+        <span class="mcp-title">{{ t('mcp.mountTitle') }}</span>
         <span class="mcp-sub">Motor Mounts & Select</span>
       </div>
 
       <!-- Motor mounts -->
       <div class="mcp-block">
-        <div class="block-title">Motor Mounts（电机座）</div>
+        <div class="block-title">Motor Mounts（{{ t('mcp.mounts') }}）</div>
         <div v-if="mounts.length === 0" class="mcp-empty">
-          当前设计没有电机座。添加「内管（发动机架管）」或把「机身管」设为电机座后，可在此选择发动机。
+          {{ t('mcp.noMounts') }}
         </div>
         <div v-else class="mount-list">
           <div v-for="(m, i) in mounts" :key="i" class="mount-row">
             <span class="mount-check">☑</span>
             <span class="mount-name">{{ m.name }}</span>
-            <span class="mount-type">{{ m.type === 'innertube' ? '内管' : '机身管' }}</span>
+            <span class="mount-type">{{ m.type === 'innertube' ? t('mcp.innerTube') : t('mcp.bodyTube') }}</span>
           </div>
         </div>
       </div>
 
       <!-- Select motor -->
       <div class="mcp-block">
-        <div class="block-title">Select Motor（选择发动机）</div>
+        <div class="block-title">Select Motor（{{ t('mcp.selectMotor') }}）</div>
         <div class="motor-pick">
           <select class="motor-select" :value="motorId" @change="onEngSelect">
             <option v-for="m in motors" :key="m.id" :value="m.id">
-              {{ m.name }}（{{ classOf(m) }} 级 · {{ m.totalImpulseNs.toFixed(1) }} N·s · 延迟 {{ m.delay }}s）
+              {{ m.name }}（{{ classOf(m) }} · {{ m.totalImpulseNs.toFixed(1) }} N·s · {{ t('sim.delay', { d: m.delay }) }}）
             </option>
           </select>
-          <button class="eng-import" @click="engInput?.click()">导入 .eng</button>
+          <button class="eng-import" @click="engInput?.click()">{{ t('sim.importEng') }}</button>
           <input ref="engInput" type="file" accept=".eng,.rse,.txt" hidden @change="onEngFile" />
         </div>
         <div v-if="currentMotor" class="motor-specs">
           <div class="spec-grid">
-            <div class="spec"><span class="sp-label">最大推力</span><span class="sp-val">{{ currentMotor.maxThrust.toFixed(1) }} N</span></div>
-            <div class="spec"><span class="sp-label">平均推力</span><span class="sp-val">{{ (currentMotor.totalImpulseNs / currentMotor.burnTime).toFixed(1) }} N</span></div>
-            <div class="spec"><span class="sp-label">燃时</span><span class="sp-val">{{ currentMotor.burnTime.toFixed(1) }} s</span></div>
-            <div class="spec"><span class="sp-label">总冲量</span><span class="sp-val">{{ currentMotor.totalImpulseNs.toFixed(1) }} N·s</span></div>
-            <div class="spec"><span class="sp-label">抛射延迟</span><span class="sp-val">{{ currentMotor.delay }} s</span></div>
-            <div class="spec"><span class="sp-label">质量</span><span class="sp-val">{{ (currentMotor.mass0 * 1000).toFixed(0) }} g</span></div>
+            <div class="spec"><span class="sp-label">{{ t('mcp.maxThrust') }}</span><span class="sp-val">{{ currentMotor.maxThrust.toFixed(1) }} N</span></div>
+            <div class="spec"><span class="sp-label">{{ t('mcp.avgThrust') }}</span><span class="sp-val">{{ (currentMotor.totalImpulseNs / currentMotor.burnTime).toFixed(1) }} N</span></div>
+            <div class="spec"><span class="sp-label">{{ t('mcp.burnTime') }}</span><span class="sp-val">{{ currentMotor.burnTime.toFixed(1) }} s</span></div>
+            <div class="spec"><span class="sp-label">{{ t('mcp.totalImpulse') }}</span><span class="sp-val">{{ currentMotor.totalImpulseNs.toFixed(1) }} N·s</span></div>
+            <div class="spec"><span class="sp-label">{{ t('mcp.delay') }}</span><span class="sp-val">{{ currentMotor.delay }} s</span></div>
+            <div class="spec"><span class="sp-label">{{ t('mcp.mass') }}</span><span class="sp-val">{{ (currentMotor.mass0 * 1000).toFixed(0) }} g</span></div>
           </div>
         </div>
       </div>
@@ -168,8 +170,8 @@ function classOf(m: MotorSpec): string {
       <div class="mcp-block">
         <div class="block-title">Ignition（点火方式）</div>
         <div class="ign-row">
-          <span class="ign-opt"><span class="radio on"></span>自动（抛射药点燃下一级）</span>
-          <span class="ign-note">Web 版当前支持自动点火与延迟优化，见「模拟发射」Tab。</span>
+          <span class="ign-opt"><span class="radio on"></span>{{ t('mcp.autoIgnition') }}</span>
+          <span class="ign-note">{{ t('mcp.ignNote') }}</span>
         </div>
       </div>
     </section>

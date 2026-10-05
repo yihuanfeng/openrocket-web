@@ -58,9 +58,9 @@ export function nearestTube(radiusM: number): string | '' {
 
 // —— 表面处理（影响气动阻力：摩擦系数乘子）——
 export const SURFACES: Array<{ id: string; label: string; factor: number }> = [
-  { id: 'smooth', label: '光滑（抛光/喷漆）', factor: 0.95 },
-  { id: 'standard', label: '标准（原厂表面）', factor: 1.0 },
-  { id: 'rough', label: '粗糙（接缝/贴纸）', factor: 1.12 },
+  { id: 'smooth', label: 'Smooth', factor: 0.95 },
+  { id: 'standard', label: 'Standard', factor: 1.0 },
+  { id: 'rough', label: 'Rough', factor: 1.12 },
 ];
 
 export function surfaceFactor(id?: string): number {

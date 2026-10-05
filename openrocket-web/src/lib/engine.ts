@@ -68,7 +68,7 @@ export function getEngineBridge(): EngineBridge {
   return current;
 }
 
-/** 引擎状态标签（顶栏展示） */
-export function engineLabel(): string {
-  return current.kind === 'wasm' ? '引擎：WASM ✓' : current.kind === 'http' ? '引擎：本地 Java 服务' : '引擎：JS 计算（分析 + 2DOF 仿真）';
+/** 引擎状态标签（顶栏展示）— 仅返回 kind，文案由 UI 本地化 */
+export function engineKindLabel(): 'wasm' | 'http' | 'js' | 'none' {
+  return current.kind;
 }

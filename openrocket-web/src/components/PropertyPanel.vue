@@ -1,60 +1,62 @@
 <script setup lang="ts">
 // 属性面板（阶段 2 编辑闭环）：支持数值编辑 + 删除组件
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { RocketComponent } from '../lib/types';
 import { MATERIALS, TUBES, SURFACES, nearestTube } from '../lib/materials';
 import { MOTORS } from '../lib/engines';
 
+const { t } = useI18n();
 const props = defineProps<{ component: RocketComponent | null; hovered?: RocketComponent | null; unitMode?: 'm' | 'mm' | 'cm' }>();
 const emit = defineEmits<{
   (e: 'changed'): void;
   (e: 'remove'): void;
 }>();
 
-// 可编辑数值字段（key, 显示名, 单位；finset 参数存 properties，其余为组件字段）
+// 可编辑数值字段（key, i18n label key, 单位；finset 参数存 properties，其余为组件字段）
 // —— 组件参数全覆盖：轴向偏移/密度/壁厚/肩部/伞直径与 CD/尾翼倾斜与位置 ——
 const EDITABLE: Record<string, Array<[string, string, string]>> = {
-  nosecone: [['axialOffset', '轴向偏移', 'm'], ['length', '长度', 'm'], ['radius', '半径', 'm'], ['density', '密度', 'kg/m³'], ['shoulderlength', '肩部长度', 'm'], ['shoulderradius', '肩部半径', 'm']],
-  bodytube: [['axialOffset', '轴向偏移', 'm'], ['length', '长度', 'm'], ['radius', '半径', 'm'], ['density', '密度', 'kg/m³'], ['wallthickness', '壁厚', 'm']],
-  transition: [['axialOffset', '轴向偏移', 'm'], ['length', '长度', 'm'], ['radius', '前端半径', 'm'], ['aftRadius', '后端半径', 'm'], ['density', '密度', 'kg/m³'], ['wallthickness', '壁厚', 'm']],
+  nosecone: [['axialOffset', 'prop.len.axialOffset', 'm'], ['length', 'prop.len.length', 'm'], ['radius', 'prop.len.radius', 'm'], ['density', 'prop.len.density', 'kg/m³'], ['shoulderlength', 'prop.len.shoulderLength', 'm'], ['shoulderradius', 'prop.len.shoulderRadius', 'm']],
+  bodytube: [['axialOffset', 'prop.len.axialOffset', 'm'], ['length', 'prop.len.length', 'm'], ['radius', 'prop.len.radius', 'm'], ['density', 'prop.len.density', 'kg/m³'], ['wallthickness', 'prop.len.wallThickness', 'm']],
+  transition: [['axialOffset', 'prop.len.axialOffset', 'm'], ['length', 'prop.len.length', 'm'], ['radius', 'prop.len.frontRadius', 'm'], ['aftRadius', 'prop.len.aftRadius', 'm'], ['density', 'prop.len.density', 'kg/m³'], ['wallthickness', 'prop.len.wallThickness', 'm']],
   trapezoidfinset: [
-    ['offset', '轴向位置', 'm'],
-    ['fincount', '翼片数', ''],
-    ['rootchord', '根弦', 'm'],
-    ['tipchord', '梢弦', 'm'],
-    ['sweep', '后掠', 'm'],
-    ['height', '高度', 'm'],
-    ['thickness', '厚度', 'm'],
-    ['cant', '倾斜角', '°'],
+    ['offset', 'prop.len.offset', 'm'],
+    ['fincount', 'prop.len.finCount', ''],
+    ['rootchord', 'prop.len.rootChord', 'm'],
+    ['tipchord', 'prop.len.tipChord', 'm'],
+    ['sweep', 'prop.len.sweep', 'm'],
+    ['height', 'prop.len.height', 'm'],
+    ['thickness', 'prop.len.thickness', 'm'],
+    ['cant', 'prop.len.cant', '°'],
   ],
-  parachute: [['axialOffset', '轴向偏移', 'm'], ['diameter', '直径', 'm'], ['cd', '阻力系数', '']],
-  launchlug: [['axialOffset', '轴向偏移', 'm'], ['length', '长度', 'm'], ['radius', '半径', 'm'], ['density', '密度', 'kg/m³']],
-  innertube: [['axialOffset', '轴向偏移', 'm'], ['length', '长度', 'm'], ['radius', '半径', 'm'], ['density', '密度', 'kg/m³']],
+  parachute: [['axialOffset', 'prop.len.axialOffset', 'm'], ['diameter', 'prop.len.diameter', 'm'], ['cd', 'prop.len.cd', '']],
+  launchlug: [['axialOffset', 'prop.len.axialOffset', 'm'], ['length', 'prop.len.length', 'm'], ['radius', 'prop.len.radius', 'm'], ['density', 'prop.len.density', 'kg/m³']],
+  innertube: [['axialOffset', 'prop.len.axialOffset', 'm'], ['length', 'prop.len.length', 'm'], ['radius', 'prop.len.radius', 'm'], ['density', 'prop.len.density', 'kg/m³']],
   ellipticalfinset: [
-    ['offset', '轴向位置', 'm'],
-    ['fincount', '翼片数', ''],
-    ['rootchord', '根弦', 'm'],
-    ['height', '高度', 'm'],
-    ['thickness', '厚度', 'm'],
-    ['cant', '倾斜角', '°'],
+    ['offset', 'prop.len.offset', 'm'],
+    ['fincount', 'prop.len.finCount', ''],
+    ['rootchord', 'prop.len.rootChord', 'm'],
+    ['height', 'prop.len.height', 'm'],
+    ['thickness', 'prop.len.thickness', 'm'],
+    ['cant', 'prop.len.cant', '°'],
   ],
   freeformfinset: [
-    ['offset', '轴向位置', 'm'],
-    ['fincount', '翼片数', ''],
-    ['rootchord', '根弦', 'm'],
-    ['tipchord', '梢弦', 'm'],
-    ['sweep', '后掠', 'm'],
-    ['height', '高度', 'm'],
-    ['thickness', '厚度', 'm'],
-    ['cant', '倾斜角', '°'],
+    ['offset', 'prop.len.offset', 'm'],
+    ['fincount', 'prop.len.finCount', ''],
+    ['rootchord', 'prop.len.rootChord', 'm'],
+    ['tipchord', 'prop.len.tipChord', 'm'],
+    ['sweep', 'prop.len.sweep', 'm'],
+    ['height', 'prop.len.height', 'm'],
+    ['thickness', 'prop.len.thickness', 'm'],
+    ['cant', 'prop.len.cant', '°'],
   ],
-  tubecoupler: [['axialOffset', '轴向偏移', 'm'], ['length', '长度', 'm'], ['radius', '半径', 'm'], ['density', '密度', 'kg/m³']],
-  bulkhead: [['axialOffset', '轴向偏移', 'm'], ['length', '厚度', 'm'], ['radius', '半径', 'm'], ['density', '密度', 'kg/m³']],
-  centeringring: [['axialOffset', '轴向偏移', 'm'], ['length', '厚度', 'm'], ['radius', '半径', 'm'], ['density', '密度', 'kg/m³']],
-  engineblock: [['axialOffset', '轴向偏移', 'm'], ['length', '长度', 'm'], ['radius', '半径', 'm'], ['density', '密度', 'kg/m³']],
-  masscomponent: [['axialOffset', '轴向偏移', 'm'], ['mass', '质量', 'kg']],
-  streamer: [['axialOffset', '轴向偏移', 'm'], ['length', '长度', 'm'], ['width', '宽度', 'm'], ['cd', '阻力系数', '']],
-  shockcord: [['axialOffset', '轴向偏移', 'm'], ['cordlength', '绳长', 'm']],
+  tubecoupler: [['axialOffset', 'prop.len.axialOffset', 'm'], ['length', 'prop.len.length', 'm'], ['radius', 'prop.len.radius', 'm'], ['density', 'prop.len.density', 'kg/m³']],
+  bulkhead: [['axialOffset', 'prop.len.axialOffset', 'm'], ['length', 'prop.len.thickness', 'm'], ['radius', 'prop.len.radius', 'm'], ['density', 'prop.len.density', 'kg/m³']],
+  centeringring: [['axialOffset', 'prop.len.axialOffset', 'm'], ['length', 'prop.len.thickness', 'm'], ['radius', 'prop.len.radius', 'm'], ['density', 'prop.len.density', 'kg/m³']],
+  engineblock: [['axialOffset', 'prop.len.axialOffset', 'm'], ['length', 'prop.len.length', 'm'], ['radius', 'prop.len.radius', 'm'], ['density', 'prop.len.density', 'kg/m³']],
+  masscomponent: [['axialOffset', 'prop.len.axialOffset', 'm'], ['mass', 'prop.len.mass', 'kg']],
+  streamer: [['axialOffset', 'prop.len.axialOffset', 'm'], ['length', 'prop.len.length', 'm'], ['width', 'prop.len.width', 'm'], ['cd', 'prop.len.cd', '']],
+  shockcord: [['axialOffset', 'prop.len.axialOffset', 'm'], ['cordlength', 'prop.len.cordLength', 'm']],
 };
 
 const SHAPES = ['ogive', 'conical', 'parabolic', 'power', 'haack'];
@@ -148,7 +150,7 @@ function onNumChange(key: string, e: Event): void {
   const v = parseFloat(input.value);
   if (isNaN(v) || v < 0) {
     invalidKeys.value = new Set(invalidKeys.value).add(key);
-    input.title = '请输入不小于 0 的数值';
+    input.title = t('prop.invalidNum');
     return; // 保留输入框内容，红框提示
   }
   const next = new Set(invalidKeys.value); next.delete(key);
@@ -180,8 +182,8 @@ const readOnlyItems = computed<Array<[string, string]>>(() => {
   const c = props.component;
   if (!c) return [];
   const out: Array<[string, string]> = [];
-  out.push(['名称', c.name]);
-  out.push(['类型', c.type]);
+  out.push([t('prop.name'), c.name]);
+  out.push([t('prop.type'), c.type]);
   const skipKeys = new Set(['material', 'tube', 'surface', 'deployAlt', 'overridemass', 'massoverride', 'shape']);
   for (const [k, v] of Object.entries(c.properties)) {
     if (EDITABLE[c.type]?.some(([ek]) => ek === k)) continue;
@@ -195,17 +197,17 @@ const readOnlyItems = computed<Array<[string, string]>>(() => {
 <template>
   <div class="panel">
     <div v-if="props.hovered && props.hovered !== component" class="hover-tip">
-      悬停：{{ props.hovered.name }} · {{ props.hovered.type }}
+      {{ t('prop.hover') }}：{{ props.hovered.name }} · {{ props.hovered.type }}
     </div>
     <template v-if="component">
       <div class="head">
-        <input class="comp-name" :value="component.name" title="点击修改组件名称" @change="onNameChange" />
-        <button class="del" title="删除该组件（含子组件）" @click="emit('remove')">删除</button>
+        <input class="comp-name" :value="component.name" :title="t('prop.editName')" @change="onNameChange" />
+        <button class="del" :title="t('prop.delTip')" @click="emit('remove')">{{ t('prop.delete') }}</button>
       </div>
       <table>
         <tbody>
           <tr v-for="([key, label, unit]) in editableFields" :key="'e-' + key">
-            <td class="k">{{ label }}</td>
+            <td class="k">{{ t(label) }}</td>
             <td class="v">
               <input
                 class="num"
@@ -220,28 +222,28 @@ const readOnlyItems = computed<Array<[string, string]>>(() => {
             </td>
           </tr>
           <tr v-if="showMaterial">
-            <td class="k">材料</td>
+            <td class="k">{{ t('prop.material') }}</td>
             <td class="v">
               <select class="sel" :value="component.properties['material'] || ''" @change="onPropChange('material', $event)">
-                <option value="">默认</option>
+                <option value="">{{ t('prop.default') }}</option>
                 <option v-for="m in MATERIALS" :key="m.name" :value="m.name">{{ m.name }}</option>
               </select>
             </td>
           </tr>
           <tr v-if="showMotor">
-            <td class="k">发动机</td>
+            <td class="k">{{ t('prop.motor') }}</td>
             <td class="v">
               <select class="sel" :value="component.properties['motorId'] || ''" @change="onPropChange('motorId', $event)">
-                <option value="">默认（仿真面板选择）</option>
-                <option v-for="m in MOTORS" :key="m.id" :value="m.id">{{ m.name }}（{{ m.class }}级 · {{ m.totalImpulseNs.toFixed(1) }} N·s · 延迟{{ m.delay }}s）</option>
+                <option value="">{{ t('prop.motorDefault') }}</option>
+                <option v-for="m in MOTORS" :key="m.id" :value="m.id">{{ m.name }}（{{ m.class }} · {{ m.totalImpulseNs.toFixed(1) }} N·s · {{ t('sim.delay', { d: m.delay }) }}）</option>
               </select>
             </td>
           </tr>
           <tr v-if="showTube">
-            <td class="k">标准直径</td>
+            <td class="k">{{ t('prop.tube') }}</td>
             <td class="v">
               <select class="sel" :value="tubeValue" @change="onTubeChange">
-                <option value="">自定义</option>
+                <option value="">{{ t('prop.custom') }}</option>
                 <option v-for="t in TUBES" :key="t.id" :value="t.id">
                   {{ t.id }}（Ø{{ (t.radiusM * 2 * 1000).toFixed(1) }} mm）
                 </option>
@@ -249,15 +251,15 @@ const readOnlyItems = computed<Array<[string, string]>>(() => {
             </td>
           </tr>
           <tr v-if="showSurface">
-            <td class="k">表面处理</td>
+            <td class="k">{{ t('prop.surface') }}</td>
             <td class="v">
               <select class="sel" :value="component.properties['surface'] || 'standard'" @change="onPropChange('surface', $event)">
-                <option v-for="s in SURFACES" :key="s.id" :value="s.id">{{ s.label }}</option>
+                <option v-for="s in SURFACES" :key="s.id" :value="s.id">{{ t('prop.surf.' + s.id) }}</option>
               </select>
             </td>
           </tr>
           <tr v-if="showDeploy">
-            <td class="k">开伞高度</td>
+            <td class="k">{{ t('prop.deployAlt') }}</td>
             <td class="v">
               <select class="sel" :value="component.properties['deployAlt'] || '0'" @change="onPropChange('deployAlt', $event)">
                 <option v-for="a in DEPLOY_ALTITUDES" :key="a" :value="String(a)">{{ a === 0 ? '远地点（0 m）' : a + ' m' }}</option>
@@ -265,7 +267,7 @@ const readOnlyItems = computed<Array<[string, string]>>(() => {
             </td>
           </tr>
           <tr v-if="component.shape && (component.type === 'nosecone' || component.type === 'transition')">
-            <td class="k">形状</td>
+            <td class="k">{{ t('prop.shape') }}</td>
             <td class="v">
               <select class="sel" :value="component.shape" @change="onShapeChange">
                 <option v-for="s in SHAPES" :key="s" :value="s">{{ s }}</option>
@@ -279,7 +281,7 @@ const readOnlyItems = computed<Array<[string, string]>>(() => {
         </tbody>
       </table>
     </template>
-    <div v-else class="empty">在左侧选择一个组件</div>
+    <div v-else class="empty">{{ t('prop.placeholder') }}</div>
   </div>
 </template>
 

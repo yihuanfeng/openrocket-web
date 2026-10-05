@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // 阶段 3：6DOF 仿真结果面板（Tab：摘要 / 高度·速度 / 加速度·马赫）
 import { nextTick, onBeforeUnmount, onMounted, ref, watch, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import * as echarts from 'echarts/core';
 import { LineChart } from 'echarts/charts';
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components';
@@ -12,6 +13,7 @@ import FlightReplay3D from './FlightReplay3D.vue';
 
 echarts.use([LineChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
 
+const { t } = useI18n();
 const props = defineProps<{
   profile: FlightProfile | null;
   loading: boolean;
@@ -146,67 +148,67 @@ function onEngFile(e: Event) {
 }
 
 const summaryItems = (p: FlightProfile) => [
-  ['最高高度', `${p.maxAltitude_m.toFixed(1)} m`],
-  ['最大速度', `${p.maxVelocity_ms.toFixed(1)} m/s`],
-  ['最大加速度', `${p.maxAcceleration_ms2.toFixed(1)} m/s²`],
-  ['最大马赫', p.maxMachNumber.toFixed(3)],
-  ['横向风偏', `${p.windDrift_m.toFixed(1)} m`],
-  ['到远地点', `${p.timeToApogee_s.toFixed(1)} s`],
-  ['总飞行时间', `${p.flightTime_s.toFixed(1)} s`],
+  [t('sim.maxAlt'), `${p.maxAltitude_m.toFixed(1)} m`],
+  [t('sim.maxVel'), `${p.maxVelocity_ms.toFixed(1)} m/s`],
+  [t('sim.maxAcc'), `${p.maxAcceleration_ms2.toFixed(1)} m/s²`],
+  [t('sim.maxMach'), p.maxMachNumber.toFixed(3)],
+  [t('sim.windDrift'), `${p.windDrift_m.toFixed(1)} m`],
+  [t('sim.toApogee'), `${p.timeToApogee_s.toFixed(1)} s`],
+  [t('sim.totalTime'), `${p.flightTime_s.toFixed(1)} s`],
 ];
 </script>
 
 <template>
   <div class="sim-pane">
     <div class="pane-head">
-      <span class="pane-title">仿真结果</span>
+      <span class="pane-title">{{ t('sim.result') }}</span>
       <div v-if="profile && !profile.error" class="tabs">
-        <button :class="['tab', { on: tab === 'summary' }]" @click="tab = 'summary'; onTab()">摘要</button>
-        <button :class="['tab', { on: tab === 'alt' }]" @click="tab = 'alt'; onTab()">高度 · 速度</button>
-        <button :class="['tab', { on: tab === 'acc' }]" @click="tab = 'acc'; onTab()">加速度 · 马赫</button>
-        <button :class="['tab', { on: tab === 'replay' }]" @click="tab = 'replay'; onTab()">回放</button>
-        <button :class="['tab', { on: tab === 'compare' }]" @click="tab = 'compare'; onTab()">多配置对比</button>
+        <button :class="['tab', { on: tab === 'summary' }]" @click="tab = 'summary'; onTab()">{{ t('sim.tabSummary') }}</button>
+        <button :class="['tab', { on: tab === 'alt' }]" @click="tab = 'alt'; onTab()">{{ t('sim.tabAlt') }}</button>
+        <button :class="['tab', { on: tab === 'acc' }]" @click="tab = 'acc'; onTab()">{{ t('sim.tabAcc') }}</button>
+        <button :class="['tab', { on: tab === 'replay' }]" @click="tab = 'replay'; onTab()">{{ t('sim.tabReplay') }}</button>
+        <button :class="['tab', { on: tab === 'compare' }]" @click="tab = 'compare'; onTab()">{{ t('sim.tabCompare') }}</button>
       </div>
     </div>
 
     <div class="motor-bar">
-      <span class="motor-label">发动机</span>
+      <span class="motor-label">{{ t('sim.motor') }}</span>
       <select class="motor-select" :value="motorId" @change="onEngChange">
         <option v-for="m in motors" :key="m.id" :value="m.id">
-          {{ m.name }}（{{ m.class }} 级 · {{ m.totalImpulseNs.toFixed(1) }} N·s · 延迟 {{ m.delay }}s）
+          {{ m.name }}（{{ m.class }} · {{ m.totalImpulseNs.toFixed(1) }} N·s · {{ t('sim.delay', { d: m.delay }) }}）
         </option>
       </select>
       <span v-if="currentMotor" class="motor-specs">
-        {{ currentMotor.maxThrust.toFixed(1) }} N 峰值 · 燃时 {{ currentMotor.burnTime.toFixed(1) }}s · {{ (currentMotor.mass0 * 1000).toFixed(0) }} g
+        {{ t('sim.peak', { v: currentMotor.maxThrust.toFixed(1) }) }} · {{ t('sim.burn', { v: currentMotor.burnTime.toFixed(1) }) }} · {{ (currentMotor.mass0 * 1000).toFixed(0) }} g
       </span>
-      <button class="motor-import" @click="engInput?.click()">导入 .eng</button>
+      <button class="motor-import" @click="engInput?.click()">{{ t('sim.importEng') }}</button>
       <input ref="engInput" type="file" accept=".eng,.rse,.txt" hidden @change="onEngFile" />
     </div>
 
     <div class="cond-bar">
-      <span class="motor-label">条件</span>
-      <label class="cond-item">风 <input class="cond-input" type="number" min="0" step="0.5" :value="conditions.windSpeed_ms" @change="onCondNum('windSpeed_ms', $event)" /> m/s</label>
-      <label class="cond-item">温 <input class="cond-input" type="number" min="-50" max="60" step="1" :value="conditions.temperature_C" @change="onCondNum('temperature_C', $event)" /> °C</label>
-      <label class="cond-item">压 <input class="cond-input" type="number" min="800" max="1100" step="1" :value="conditions.pressure_hPa" @change="onCondNum('pressure_hPa', $event)" /> hPa</label>
+      <span class="motor-label">{{ t('sim.conditions') }}</span>
+      <label class="cond-item">{{ t('sim.wind') }} <input class="cond-input" type="number" min="0" step="0.5" :value="conditions.windSpeed_ms" @change="onCondNum('windSpeed_ms', $event)" /> m/s</label>
+      <label class="cond-item">{{ t('sim.temp') }} <input class="cond-input" type="number" min="-50" max="60" step="1" :value="conditions.temperature_C" @change="onCondNum('temperature_C', $event)" /> °C</label>
+      <label class="cond-item">{{ t('sim.pressure') }} <input class="cond-input" type="number" min="800" max="1100" step="1" :value="conditions.pressure_hPa" @change="onCondNum('pressure_hPa', $event)" /> hPa</label>
     </div>
 
     <div class="opt-bar">
       <button class="motor-import" :disabled="delayLoading || !profile" @click="emit('optimizeDelay')">
-        {{ delayLoading ? '扫描中…' : '计算最优延迟' }}
+        {{ delayLoading ? t('sim.scanning') : t('sim.optDelay') }}
       </button>
       <span v-if="delayScan" class="opt-result">
-        最优延迟 {{ delayScan.bestDelay_s }}s（远地点 {{ delayScan.apogee_s.toFixed(1) }}s − 燃尽 {{ delayScan.burn_s.toFixed(1) }}s）
+        {{ t('sim.optResult', { d: delayScan.bestDelay_s, ap: delayScan.apogee_s.toFixed(1), b: delayScan.burn_s.toFixed(1) }) }}
       </span>
     </div>
     <div v-if="delayScan" class="delay-table">
       <table>
-        <thead><tr><th>延迟 s</th><th>高度 m</th><th>飞行 s</th><th>开伞</th></tr></thead>
+        <thead><tr><th>{{ t('sim.delayS') }}</th><th>{{ t('sim.altM') }}</th><th>{{ t('sim.flightS') }}</th><th>{{ t('sim.deploy') }}</th></tr></thead>
         <tbody>
           <tr v-for="r in delayScan.rows" :key="r.delay_s" :class="{ best: r.delay_s === delayScan.bestDelay_s }">
             <td>{{ r.delay_s }}</td>
             <td>{{ r.maxAltitude_m.toFixed(0) }}</td>
             <td>{{ r.flightTime_s.toFixed(1) }}</td>
-            <td>{{ r.deployed ? '是' : '否' }}</td>
+            <td>{{ r.deployed ? t('common.yes') : t('common.no') }}</td>
           </tr>
         </tbody>
       </table>
@@ -215,20 +217,20 @@ const summaryItems = (p: FlightProfile) => [
     <div v-if="tab === 'compare'" class="compare-box">
       <div class="opt-bar">
         <button class="motor-import" :disabled="compareLoading" @click="emit('compareAll')">
-          {{ compareLoading ? '对比中…' : '对比全部电机（并行仿真）' }}
+          {{ compareLoading ? t('sim.comparing') : t('sim.compareAll') }}
         </button>
-        <span class="opt-result">{{ compareRows.length }} 个配置</span>
+        <span class="opt-result">{{ t('sim.configCount', { n: compareRows.length }) }}</span>
       </div>
-      <div v-if="compareRows.length === 0" class="empty">运行一次仿真或点击「对比全部电机」生成多电机对比表。</div>
+      <div v-if="compareRows.length === 0" class="empty">{{ t('sim.compareEmpty') }}</div>
       <div v-else class="delay-table compare-table">
         <table>
-          <thead><tr><th>发动机</th><th>最高高度</th><th>最大速度</th><th>最大马赫</th><th>风偏</th><th>到远地点</th><th>总飞行</th></tr></thead>
+          <thead><tr><th>{{ t('sim.motor') }}</th><th>{{ t('sim.maxAlt') }}</th><th>{{ t('sim.maxVel') }}</th><th>{{ t('sim.maxMach') }}</th><th>{{ t('sim.windDrift') }}</th><th>{{ t('sim.toApogee') }}</th><th>{{ t('sim.totalTime') }}</th></tr></thead>
           <tbody>
             <tr
               v-for="r in compareRows"
               :key="r.motorId"
               :class="{ on: r.motorId === motorId }"
-              :title="'查看 ' + r.motorName + ' 的飞行曲线'"
+              :title="t('sim.viewCurve', { name: r.motorName })""
               @click="emit('selectCompare', r)"
             >
               <td class="cmp-name">{{ r.motorName }}</td>
@@ -258,8 +260,8 @@ const summaryItems = (p: FlightProfile) => [
         <FlightReplay3D :profile="profile" />
       </div>
     </div>
-    <div v-else-if="loading" class="empty">仿真运行中…（6DOF 全飞行，约数秒）</div>
-    <div v-else class="empty">尚未仿真。点击顶部「仿真」按钮运行全飞行模拟。</div>
+    <div v-else-if="loading" class="empty">{{ t('sim.running') }}</div>
+    <div v-else class="empty">{{ t('sim.notRun') }}</div>
   </div>
 </template>
 

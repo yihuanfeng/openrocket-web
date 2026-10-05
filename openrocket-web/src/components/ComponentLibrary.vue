@@ -1,6 +1,9 @@
 <script setup lang="ts">
 // 组件库（设计 Tab 右侧）：OpenRocket 官方 4 类分区 + 官方图标
+import { useI18n } from 'vue-i18n';
 const emit = defineEmits<{ add: [type: string] }>();
+
+const { t } = useI18n();
 
 // GitHub Pages 子路径部署：资源统一走相对 BASE_URL
 const base = import.meta.env.BASE_URL;
@@ -10,51 +13,51 @@ interface LibItem {
   code: string;        // 组件类型码
   zh: string;          // 中文名
   en: string;          // 官方英文名
-  desc: string;
+  descKey: string;     // 描述 i18n key
   supported: boolean;  // Web 当前是否支持创建
   icon: string;        // 官方图标文件
 }
 
-const GROUPS: { title: string; en: string; items: LibItem[] }[] = [
+const GROUPS: { titleKey: string; en: string; items: LibItem[] }[] = [
   {
-    title: '装配', en: 'Assembly',
+    titleKey: 'lib.groups.assembly', en: 'Assembly',
     items: [
-      { code: 'stage', zh: '级', en: 'Stage', desc: '火箭的基本框架，至少一级', supported: true, icon: 'stage' },
-      { code: 'boosters', zh: '助推器', en: 'Boosters', desc: '可分离的并联助推级', supported: true, icon: 'boosters' },
-      { code: 'pods', zh: '捆绑舱', en: 'Pods', desc: '不可分离的侧挂舱（如侧挂电机）', supported: true, icon: 'pods' },
+      { code: 'stage', zh: '级', en: 'Stage', descKey: 'lib.desc.stage', supported: true, icon: 'stage' },
+      { code: 'boosters', zh: '助推器', en: 'Boosters', descKey: 'lib.desc.boosters', supported: true, icon: 'boosters' },
+      { code: 'pods', zh: '捆绑舱', en: 'Pods', descKey: 'lib.desc.pods', supported: true, icon: 'pods' },
     ],
   },
   {
-    title: '机身与尾翼', en: 'Body & Fin',
+    titleKey: 'lib.groups.body', en: 'Body & Fin',
     items: [
-      { code: 'nosecone', zh: '头锥', en: 'Nose Cone', desc: '气动头部，多种外形', supported: true, icon: 'nosecone' },
-      { code: 'bodytube', zh: '机身管', en: 'Body Tube', desc: '主体管，可设为电机座', supported: true, icon: 'bodytube' },
-      { code: 'transition', zh: '过渡段', en: 'Transition', desc: '前后直径不同的变径段', supported: true, icon: 'transition' },
-      { code: 'trapezoidfinset', zh: '梯形尾翼', en: 'Trapezoidal Fin', desc: '默认 3 片，保证稳定', supported: true, icon: 'trapezoidfin' },
-      { code: 'ellipticalfinset', zh: '椭圆尾翼', en: 'Elliptical Fin', desc: '椭圆外形的尾翼组', supported: true, icon: 'ellipticalfin' },
-      { code: 'freeformfinset', zh: '自由尾翼', en: 'Freeform Fin', desc: '自定义任意外形', supported: true, icon: 'freeformfin' },
-      { code: 'tubefinset', zh: '管尾翼', en: 'Tube Fin', desc: '环绕管组（如集束管）', supported: true, icon: 'tubefin' },
-      { code: 'launchlug', zh: '发射导环', en: 'Launch Lug', desc: '套在发射杆上的导环', supported: true, icon: 'launchlug' },
-      { code: 'railbutton', zh: '导轨按钮', en: 'Rail Button', desc: '轨道发射导轨按钮', supported: true, icon: 'railbutton' },
+      { code: 'nosecone', zh: '头锥', en: 'Nose Cone', descKey: 'lib.desc.nosecone', supported: true, icon: 'nosecone' },
+      { code: 'bodytube', zh: '机身管', en: 'Body Tube', descKey: 'lib.desc.bodytube', supported: true, icon: 'bodytube' },
+      { code: 'transition', zh: '过渡段', en: 'Transition', descKey: 'lib.desc.transition', supported: true, icon: 'transition' },
+      { code: 'trapezoidfinset', zh: '梯形尾翼', en: 'Trapezoidal Fin', descKey: 'lib.desc.trapezoidfinset', supported: true, icon: 'trapezoidfin' },
+      { code: 'ellipticalfinset', zh: '椭圆尾翼', en: 'Elliptical Fin', descKey: 'lib.desc.ellipticalfinset', supported: true, icon: 'ellipticalfin' },
+      { code: 'freeformfinset', zh: '自由尾翼', en: 'Freeform Fin', descKey: 'lib.desc.freeformfinset', supported: true, icon: 'freeformfin' },
+      { code: 'tubefinset', zh: '管尾翼', en: 'Tube Fin', descKey: 'lib.desc.tubefinset', supported: true, icon: 'tubefin' },
+      { code: 'launchlug', zh: '发射导环', en: 'Launch Lug', descKey: 'lib.desc.launchlug', supported: true, icon: 'launchlug' },
+      { code: 'railbutton', zh: '导轨按钮', en: 'Rail Button', descKey: 'lib.desc.railbutton', supported: true, icon: 'railbutton' },
     ],
   },
   {
-    title: '内部组件', en: 'Inner',
+    titleKey: 'lib.groups.inner', en: 'Inner',
     items: [
-      { code: 'innertube', zh: '内管', en: 'Inner Tube', desc: '内部管，可作电机座', supported: true, icon: 'innertube' },
-      { code: 'tubecoupler', zh: '管接头', en: 'Tube Coupler', desc: '连接两节机身管', supported: true, icon: 'tubecoupler' },
-      { code: 'centeringring', zh: '定心环', en: 'Centering Ring', desc: '支撑内管/电机', supported: true, icon: 'centeringring' },
-      { code: 'bulkhead', zh: '隔框', en: 'Bulkhead', desc: '封闭舱段的隔板', supported: true, icon: 'bulkhead' },
-      { code: 'engineblock', zh: '发动机挡块', en: 'Engine Block', desc: '防止电机前移', supported: true, icon: 'engineblock' },
+      { code: 'innertube', zh: '内管', en: 'Inner Tube', descKey: 'lib.desc.innertube', supported: true, icon: 'innertube' },
+      { code: 'tubecoupler', zh: '管接头', en: 'Tube Coupler', descKey: 'lib.desc.tubecoupler', supported: true, icon: 'tubecoupler' },
+      { code: 'centeringring', zh: '定心环', en: 'Centering Ring', descKey: 'lib.desc.centeringring', supported: true, icon: 'centeringring' },
+      { code: 'bulkhead', zh: '隔框', en: 'Bulkhead', descKey: 'lib.desc.bulkhead', supported: true, icon: 'bulkhead' },
+      { code: 'engineblock', zh: '发动机挡块', en: 'Engine Block', descKey: 'lib.desc.engineblock', supported: true, icon: 'engineblock' },
     ],
   },
   {
-    title: '质量与回收', en: 'Mass & Recovery',
+    titleKey: 'lib.groups.recovery', en: 'Mass & Recovery',
     items: [
-      { code: 'parachute', zh: '降落伞', en: 'Parachute', desc: '主回收伞', supported: true, icon: 'parachute' },
-      { code: 'streamer', zh: '飘带', en: 'Streamer', desc: '轻型阻力回收', supported: true, icon: 'streamer' },
-      { code: 'shockcord', zh: '减震绳', en: 'Shock Cord', desc: '舱段连接弹性绳', supported: true, icon: 'shockcord' },
-      { code: 'masscomponent', zh: '配重', en: 'Mass Component', desc: '调整重心位置', supported: true, icon: 'mass' },
+      { code: 'parachute', zh: '降落伞', en: 'Parachute', descKey: 'lib.desc.parachute', supported: true, icon: 'parachute' },
+      { code: 'streamer', zh: '飘带', en: 'Streamer', descKey: 'lib.desc.streamer', supported: true, icon: 'streamer' },
+      { code: 'shockcord', zh: '减震绳', en: 'Shock Cord', descKey: 'lib.desc.shockcord', supported: true, icon: 'shockcord' },
+      { code: 'masscomponent', zh: '配重', en: 'Mass Component', descKey: 'lib.desc.masscomponent', supported: true, icon: 'mass' },
     ],
   },
 ];
@@ -69,7 +72,7 @@ function click(item: LibItem): void {
   <div class="lib">
     <div v-for="g in GROUPS" :key="g.en" class="lib-group">
       <div class="lib-group-title">
-        <span class="grp-zh">{{ g.title }}</span>
+        <span class="grp-zh">{{ t(g.titleKey) }}</span>
         <span class="grp-en">{{ g.en }}</span>
       </div>
       <button
@@ -77,7 +80,7 @@ function click(item: LibItem): void {
         :key="item.code"
         class="lib-item"
         :class="{ off: !item.supported }"
-        :title="item.supported ? item.desc : item.desc + '（Web 版当前未开放）'"
+        :title="item.supported ? t(item.descKey) : t(item.descKey) + t('lib.notSupported')"
         @click="click(item)"
       >
         <span class="li-icon"><img :src="`${base}ork-assets/component-icons/${item.icon}-large.png`" :alt="item.en" draggable="false" /></span>
@@ -86,13 +89,13 @@ function click(item: LibItem): void {
             {{ item.zh }}
             <span class="li-en">{{ item.en }}</span>
           </span>
-          <span class="li-desc">{{ item.desc }}</span>
+          <span class="li-desc">{{ t(item.descKey) }}</span>
         </span>
-        <span class="li-tag" v-if="!item.supported">即将支持</span>
+        <span class="li-tag" v-if="!item.supported">{{ t('lib.notSupported') }}</span>
         <span class="li-plus" v-else>＋</span>
       </button>
     </div>
-    <p class="lib-tip">点击即加（默认参数），选中后在下方预览区右侧编辑属性。来源：OpenRocket 官方组件库。</p>
+    <p class="lib-tip">{{ t('lib.tip') }}</p>
   </div>
 </template>
 

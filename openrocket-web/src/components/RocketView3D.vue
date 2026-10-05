@@ -1,9 +1,11 @@
 <script setup lang="ts">
 // 3D 视图 v2：Apple 标准材质渲染——金属高光 / 地面阴影 / 尺寸标注 / 部件高亮
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { RocketComponent } from '../lib/types';
 import { layoutRocket, type GeoSeg } from '../lib/geometry';
 
+const { t } = useI18n();
 const props = defineProps<{ root: RocketComponent; selected?: RocketComponent | null; cgX?: number | null; cpX?: number | null; orientation?: 'vertical' | 'horizontal' }>();
 const emit = defineEmits<{ hover: [c: RocketComponent | null]; pick: [c: RocketComponent] }>();
 const isH = computed(() => props.orientation === 'horizontal');
@@ -289,10 +291,6 @@ function buildTris(): Tri[] {
 // —— 交互状态 ——
 const canvas = ref<HTMLCanvasElement | null>(null);
 // —— CG/CP 标记悬浮说明 ——
-const MARK_TIPS: Record<string, string> = {
-  CG: '重心（Center of Gravity）· 全箭质量平衡点：CP 在其后，飞行才稳定',
-  CP: '压心（Center of Pressure）· 气动合力作用点：应在 CG 之后（静稳定裕度 > 0）',
-};
 const markSpots = ref<{ x: number; y: number; kind: string; z: number }[]>([]);
 const markTip = ref<{ x: number; y: number; text: string } | null>(null);
 function onCvMove(e: MouseEvent): void {
@@ -307,7 +305,7 @@ function onCvMove(e: MouseEvent): void {
     if (d < bd) { bd = d; best = m; }
   }
   markTip.value = best
-    ? { x: mx, y: my, text: `${best.kind} ${best.z.toFixed(3)} m · ${MARK_TIPS[best.kind]}` }
+    ? { x: mx, y: my, text: `${best.kind} ${best.z.toFixed(3)} m · ${best.kind === 'CG' ? t('view3d.markCG') : t('view3d.markCP')}` }
     : null;
 }
 const lastTris: Tri[] = [];
@@ -323,10 +321,10 @@ const xrayTarget = ref(false);
 
 // —— P2：视角预设（等距 / 正视 / 侧视 / 顶视，300ms lerp 过渡）——
 const VIEW_PRESETS = {
-  iso: { rotY: 0.6, tilt: 0.38, label: '等距' },
-  front: { rotY: 0, tilt: 1.42, label: '正视' },
-  side: { rotY: 0, tilt: 0.02, label: '侧视' },
-  top: { rotY: Math.PI / 2, tilt: 1.42, label: '顶视' },
+  iso: { rotY: 0.6, tilt: 0.38 },
+  front: { rotY: 0, tilt: 1.42 },
+  side: { rotY: 0, tilt: 0.02 },
+  top: { rotY: Math.PI / 2, tilt: 1.42 },
 } as const;
 const viewPreset = ref<'iso' | 'front' | 'side' | 'top'>('iso');
 let presetAnim = 0;
@@ -555,10 +553,10 @@ function draw(): void {
   c.font = '500 10px -apple-system, "SF Pro Text", "PingFang SC", sans-serif';
   if (isH.value) {
     c.textAlign = 'left';
-    c.fillText('Z（轴向）→', cxp - maxZ * unit * 0.5, cyp + 32);
+    c.fillText(t('view3d.axisZ')+'→', cxp - maxZ * unit * 0.5, cyp + 32);
   } else {
     c.textAlign = 'left';
-    c.fillText('Z（轴向）', cxp + 9, baseY + maxZ * unit + 14);
+    c.fillText(t('view3d.axisZ'), cxp + 9, baseY + maxZ * unit + 14);
   }
 
   // XYZ 轴指示器（左下角罗盘，随视角旋转）
@@ -597,7 +595,7 @@ function draw(): void {
   c.fillStyle = 'rgba(210,232,255,0.45)';
   c.font = '400 9px -apple-system, "SF Pro Text", "PingFang SC", sans-serif';
   c.textAlign = 'center';
-  c.fillText('参考系', ox, oy + 18);
+  c.fillText(t('view3d.refFrame'), ox, oy + 18);
 
   // 尺寸标注：总长 + 最大直径（竖版在底部；横版在顶部）
   ctx.fillStyle = 'rgba(210,228,255,0.9)';
@@ -637,7 +635,7 @@ function draw(): void {
   ctx.fillStyle = 'rgba(210,228,255,0.55)';
   ctx.font = '400 11px -apple-system, "SF Pro Text", "PingFang SC", sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(hoverName.value || (xrayT.value > 0.5 ? '剖视模式 · 拖拽旋转 · 滚轮缩放' : '拖拽旋转 · 滚轮缩放'), w / 2, h - 8);
+  ctx.fillText(hoverName.value || (xrayT.value > 0.5 ? t('view3d.hintCut') : t('view3d.hintDrag')), w / 2, h - 8);
 }
 
 function onDown(e: MouseEvent): void {
@@ -765,17 +763,17 @@ onBeforeUnmount(() => {
     <canvas ref="canvas" class="cv" @mousemove="onCvMove" @mouseleave="markTip = null" />
     <div v-if="markTip" class="mark-tip3d" :style="{ left: markTip.x + 14 + 'px', top: markTip.y + 10 + 'px' }">{{ markTip.text }}</div>
     <div class="xray-seg seg">
-      <button :class="{ on: !xrayTarget }" @click="xrayTarget = false">实体</button>
-      <button :class="{ on: xrayTarget }" @click="xrayTarget = true">剖视</button>
+      <button :class="{ on: !xrayTarget }" @click="xrayTarget = false">{{ t('view3d.solid') }}</button>
+      <button :class="{ on: xrayTarget }" @click="xrayTarget = true">{{ t('view3d.cutaway') }}</button>
     </div>
     <div class="view-preset seg">
       <button
-        v-for="(v, k) in VIEW_PRESETS"
+        v-for="(_, k) in VIEW_PRESETS"
         :key="k"
         :class="{ on: viewPreset === k }"
-        :title="v.label"
+        :title="t('view3d.presets.' + k)"
         @click="setViewPreset(k as 'iso' | 'front' | 'side' | 'top')"
-      >{{ v.label }}</button>
+      >{{ t('view3d.presets.' + k) }}</button>
     </div>
   </div>
 </template>

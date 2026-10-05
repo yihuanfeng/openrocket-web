@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // 主应用：上功能区（设计/发动机配置/模拟发射 三 Tab）+ 下预览（2D/3D + 属性 + 信息条）
 import { ref, toRaw, watch, onMounted, onBeforeUnmount, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { parseOrk } from './lib/orkParser';
 import { layoutRocket } from './lib/geometry';
 import { parseRkt, modelToRkt } from './lib/rktParser';
@@ -21,6 +22,7 @@ import { makeComponent } from './lib/componentFactory';
 import { PRESETS } from './lib/presets';
 import { modelToOrkBlob } from './lib/orkSerializer';
 
+const { t, locale } = useI18n();
 const viewMode = ref<'2d' | '3d'>('2d');
 // 部署路径基准（GH Pages 子路径部署兼容；本地/根路径为 './'）
 const base = import.meta.env.BASE_URL;
@@ -44,7 +46,11 @@ function setLayout(m: LayoutMode): void {
 }
 // 设置面板
 const settingsOpen = ref(false);
-const settingsTab = ref<'layout' | 'unit'>('layout');
+const settingsTab = ref<'layout' | 'unit' | 'lang'>('layout');
+function setLang(l: 'zh' | 'en'): void {
+  locale.value = l;
+  localStorage.setItem('ork:lang', l);
+}
 
 // 功能区尺寸：上下=高度百分比，左右=宽度百分比；分隔条双模式拖拽
 const workH = ref(Number(localStorage.getItem('ork:workH')) || 44);
@@ -139,15 +145,11 @@ function fmtLen2(v: number): string {
 function fmtMass(v: number): string {
   return v >= 0.1 ? v.toFixed(3) + ' kg' : (v * 1000).toFixed(1) + ' g';
 }
-const TYPE_LABEL2: Record<string, string> = {
-  rocket: '火箭', stage: '级', nosecone: '头锥', bodytube: '机身管', transition: '过渡段',
-  tubecoupler: '管接头', bulkhead: '隔框', centeringring: '定心环', engineblock: '发动机挡块',
-  innertube: '内管', trapezoidfinset: '梯形尾翼', ellipticalfinset: '椭圆尾翼',
-  freeformfinset: '自由尾翼', parachute: '降落伞', streamer: '飘带', shockcord: '减震绳',
-  masscomponent: '配重', launchlug: '发射导环', railbutton: '导轨按钮', podset: '捆绑舱',
-};
 function typeLabelOf(c: RocketComponent | null): string {
-  return c ? (TYPE_LABEL2[c.type] ?? c.type) : '';
+  if (!c) return '';
+  const key = c.type === 'rocket' || c.type === 'podset' ? c.type : c.type;
+  const v = t(`compTypes.${key}`);
+  return v.startsWith('compTypes.') ? c.type : v;
 }
 
 // 组件库添加：级走 addStage，其余 quickAdd
@@ -952,10 +954,17 @@ function exportRkt(): void {
 }
 
 // —— 引擎状态 ——
-import { engineLabel, engineDiag } from './lib/engine';
+import { engineDiag } from './lib/engine';
 const engineKind = ref(getEngineBridge().kind);
+function engineLabel(): string {
+  const k = engineKind.value;
+  if (k === 'wasm') return t('engine.wasm');
+  if (k === 'http') return t('engine.http');
+  return t('engine.js');
+}
 function engineTip(): string {
-  return engineDiag().tip;
+  const d = engineDiag();
+  return d.supported ? t('engine.diagOk') : t('engine.diagNo');
 }
 
 onBeforeUnmount(() => {
@@ -984,19 +993,19 @@ function stabColor(): string {
 }
 function stabNote(): string {
   const v = stabVal();
-  if (isNaN(v)) return '暂无法计算';
-  if (v < 1) return '不稳定（<1 口径）：需加大尾翼或后移重心';
-  if (v <= 2) return '稳定（1–2 口径，常规推荐区间）';
-  return '过稳定（>2 口径）：飞行可能过于迟钝';
+  if (isNaN(v)) return t('prop.note.stabNaN');
+  if (v < 1) return t('prop.note.unstable');
+  if (v <= 2) return t('prop.note.stable');
+  return t('prop.note.overStable');
 }
 </script>
 
 <template>
   <div class="app" @dragover.prevent @drop="onDrop">
     <div v-if="restoreInfo" class="restore-bar">
-      <span>检测到上次未完成的工作（自动保存于 {{ restoreInfo.time }}）</span>
-      <button class="btn primary sm" @click="restoreAuto">恢复</button>
-      <button class="btn ghost sm" @click="discardAuto">丢弃</button>
+      <span>{{ t('app.restore.title', { time: restoreInfo.time }) }}</span>
+      <button class="btn primary sm" @click="restoreAuto">{{ t('app.restore.restore') }}</button>
+      <button class="btn ghost sm" @click="discardAuto">{{ t('app.restore.discard') }}</button>
     </div>
 
     <!-- 顶栏 -->
@@ -1008,46 +1017,46 @@ function stabNote(): string {
       </div>
       <div class="tb-sep"></div>
 
-      <button class="btn onDark examples-trigger" title="打开示例面板" @click="examplesOpen = true">示例 ▾</button>
+      <button class="btn onDark examples-trigger" :title="t('app.file.examplePanel')" @click="examplesOpen = true">{{ t('app.file.examples') }}</button>
 
       <div class="menu" ref="fileMenuEl">
-        <button class="btn onDark menu-trigger" :class="{ active: menuOpen }" @click.stop="menuOpen = !menuOpen">文件 ▾</button>
+        <button class="btn onDark menu-trigger" :class="{ active: menuOpen }" @click.stop="menuOpen = !menuOpen">{{ t('app.file.menu') }}</button>
         <div v-if="menuOpen" class="menu-panel">
-          <button class="mi" @click="newRocket">新建</button>
-          <label class="mi file">打开…<input ref="fileInput" type="file" accept=".ork,.rkt" style="display: none" @change="onPick" /></label>
-          <button class="mi" :disabled="!model" @click="saveOrk">保存 .ork</button>
+          <button class="mi" @click="newRocket">{{ t('app.file.new') }}</button>
+          <label class="mi file">{{ t('app.file.open') }}<input ref="fileInput" type="file" accept=".ork,.rkt" style="display: none" @change="onPick" /></label>
+          <button class="mi" :disabled="!model" @click="saveOrk">{{ t('app.file.saveOrk') }}</button>
           <div class="mi-sep"></div>
-          <button class="mi" @click="examplesOpen = true">示例设计面板（内置 6 + 官方 16）…</button>
+          <button class="mi" @click="examplesOpen = true">{{ t('app.file.examplePanel') }}</button>
           <div class="mi-sep"></div>
-          <div class="mi-head">导出</div>
-          <button class="mi" :disabled="!model" @click="onExportBy('svg')">SVG 图形</button>
-          <button class="mi" :disabled="!model" @click="onExportBy('csv')">CSV 组件清单</button>
-          <button class="mi" :disabled="!model" @click="exportRkt">导出 RKT（Rocksim）</button>
-          <button class="mi" :disabled="!model" @click="onExportBy('obj')">OBJ 3D 模型</button>
-          <button class="mi" :disabled="!model" @click="exportPdf">打印 / 导出 PDF</button>
+          <div class="mi-head">{{ t('app.file.export') }}</div>
+          <button class="mi" :disabled="!model" @click="onExportBy('svg')">{{ t('app.file.svg') }}</button>
+          <button class="mi" :disabled="!model" @click="onExportBy('csv')">{{ t('app.file.csv') }}</button>
+          <button class="mi" :disabled="!model" @click="exportRkt">{{ t('app.file.rkt') }}</button>
+          <button class="mi" :disabled="!model" @click="onExportBy('obj')">{{ t('app.file.obj') }}</button>
+          <button class="mi" :disabled="!model" @click="exportPdf">{{ t('app.file.pdf') }}</button>
         </div>
       </div>
 
       <div class="spacer"></div>
-      <span v-if="loading" class="status">解析中…</span>
-      <span v-if="error" class="error">错误：{{ error }}</span>
+      <span v-if="loading" class="status">{{ t('common.loading') }}</span>
+      <span v-if="error" class="error">{{ t('common.error', { msg: error }) }}</span>
       <span class="engine-tag" :title="engineTip()">{{ engineLabel() }}</span>
-      <button class="btn primary sim-btn" :disabled="!model || simLoading" @click="runSimulate">{{ simLoading ? '仿真中…' : '▶ 仿真' }}</button>
-      <button class="btn icon onDark settings-btn" :class="{ active: settingsOpen }" title="设置" @click="settingsOpen = !settingsOpen">⚙</button>
+      <button class="btn primary sim-btn" :disabled="!model || simLoading" @click="runSimulate">{{ simLoading ? t('app.sim.running') : t('app.sim.run') }}</button>
+      <button class="btn icon onDark settings-btn" :class="{ active: settingsOpen }" :title="t('settings.settings')" @click="settingsOpen = !settingsOpen">⚙</button>
     </header>
 
     <!-- 功能区 Tab 栏 -->
     <nav class="work-tabs">
       <button :class="{ on: activeTab === 'design' }" @click="activeTab = 'design'">
-        <span class="tab-ic">✏</span>设计<span class="tab-en">Design</span>
+        <span class="tab-ic">✏</span>{{ t('app.tabs.design') }}<span class="tab-en">Design</span>
       </button>
       <button :class="{ on: activeTab === 'motor' }" @click="activeTab = 'motor'">
-        <span class="tab-ic">⚙</span>发动机配置<span class="tab-en">Motors</span>
+        <span class="tab-ic">⚙</span>{{ t('app.tabs.motors') }}<span class="tab-en">Motors</span>
       </button>
       <button :class="{ on: activeTab === 'sim' }" @click="activeTab = 'sim'">
-        <span class="tab-ic">🚀</span>模拟发射<span class="tab-en">Flight</span>
+        <span class="tab-ic">🚀</span>{{ t('app.tabs.flight') }}<span class="tab-en">Flight</span>
       </button>
-      <span v-if="dirty" class="dirty-tag" title="有未落盘更改，正在自动保存">● 未保存</span>
+      <span v-if="dirty" class="dirty-tag" :title="t('app.unsavedTip')">{{ t('app.unsaved') }}</span>
     </nav>
 
     <!-- 主行：功能区 + 分隔条 + 预览（v=上下 / h=左右） -->
@@ -1055,28 +1064,28 @@ function stabNote(): string {
     <!-- 功能区 -->
     <section class="work-area" :style="workAreaStyle">
       <div v-if="engineKind === 'none'" class="engine-warn">
-        <b>引擎不可用</b> — {{ engineTip() }}
+        <b>{{ t('app.engineUnavailable') }}</b> — {{ engineTip() }}
       </div>
 
       <!-- 设计 Tab：左组件树 + 右组件库 -->
       <template v-if="activeTab === 'design'">
         <aside class="tree-col" :style="{ width: leftW + 'px' }">
           <div class="pane-title">
-            <span>组件树</span>
+            <span>{{ t('app.tree.title') }}</span>
             <span class="tree-ops">
-              <button class="mini" :disabled="!canUndo()" title="撤销（Cmd/Ctrl+Z）" @click="undo">↶</button>
-              <button class="mini" :disabled="!canRedo()" title="重做" @click="redo">↷</button>
-              <button class="mini" :disabled="!model" title="添加新级（多级火箭）" @click="addStage">＋ 级</button>
+              <button class="mini" :disabled="!canUndo()" :title="t('app.undoTip')" @click="undo">↶</button>
+              <button class="mini" :disabled="!canRedo()" :title="t('app.redoTip')" @click="redo">↷</button>
+              <button class="mini" :disabled="!model" :title="t('app.tree.addStageTip')" @click="addStage">{{ t('app.tree.addStage') }}</button>
             </span>
           </div>
           <ComponentTree v-if="model" :root="model.root" v-model="selected" :hovered="hoveredComp" @copy="copyComponent" @remove="removeComponent" @move="moveComponent" @move-to="moveToComponent" />
-          <div v-else class="hint">新建或打开设计后显示</div>
+          <div v-else class="hint">{{ t('app.tree.empty') }}</div>
         </aside>
-        <div class="resize-handle" title="拖拽调整宽度" @mousedown.prevent="startResize('left', $event)"></div>
+        <div class="resize-handle" :title="t('app.resizeW')" @mousedown.prevent="startResize('left', $event)"></div>
         <section class="lib-col">
           <div class="pane-title">
-            <span>组件库</span>
-            <span class="lib-count">OpenRocket 官方 · 4 类</span>
+            <span>{{ t('app.lib.title') }}</span>
+            <span class="lib-count">{{ t('app.lib.subtitle') }}</span>
           </div>
           <div class="lib-scroll">
             <ComponentLibrary @add="onLibAdd" />
@@ -1127,21 +1136,21 @@ function stabNote(): string {
     </section>
 
     <!-- 垂直分隔条（v：调功能区/预览区高度；h：调左右宽度） -->
-    <div class="v-resize" :title="layoutMode === 'h' ? '拖拽调整功能区宽度' : '拖拽调整功能区高度'" @mousedown.prevent="startVResize($event)"></div>
+    <div class="v-resize" :title="layoutMode === 'h' ? t('app.resizeWorkW') : t('app.resizeWorkH')" @mousedown.prevent="startVResize($event)"></div>
 
     <!-- 预览区 -->
     <section class="preview-area">
       <div class="prev-head">
         <div class="seg view-seg">
-          <button :class="{ on: viewMode === '2d' }" @click="viewMode = '2d'">2D 侧视</button>
-          <button :class="{ on: viewMode === '3d' }" @click="viewMode = '3d'">3D 视图</button>
+          <button :class="{ on: viewMode === '2d' }" @click="viewMode = '2d'">{{ t('app.view.v2d') }}</button>
+          <button :class="{ on: viewMode === '3d' }" @click="viewMode = '3d'">{{ t('app.view.v3d') }}</button>
           <span class="view-sep"></span>
-          <button :class="{ on: orientation === 'vertical' }" title="火箭竖直摆放" @click="setOrient('vertical')">竖</button>
-          <button :class="{ on: orientation === 'horizontal' }" title="火箭水平摆放" @click="setOrient('horizontal')">横</button>
+          <button :class="{ on: orientation === 'vertical' }" :title="t('app.view.orientVTip')" @click="setOrient('vertical')">{{ t('app.view.orientV') }}</button>
+          <button :class="{ on: orientation === 'horizontal' }" :title="t('app.view.orientHTip')" @click="setOrient('horizontal')">{{ t('app.view.orientH') }}</button>
         </div>
-        <div class="prev-title">{{ model ? model.name : '火箭预览' }}</div>
+        <div class="prev-title">{{ model ? model.name : t('app.view.name') }}</div>
         <div class="prev-stab" v-if="previewInfo.stability != null" :style="{ color: stabColor() }" :title="stabNote()">
-          稳定度 {{ previewInfo.stability.toFixed(2) }} 口径
+          {{ t('prop.stabLabel', { v: previewInfo.stability.toFixed(2) }) }}
         </div>
         <div class="prev-scale">
           <div class="stab-scale">
@@ -1159,26 +1168,26 @@ function stabNote(): string {
           <RocketView3D ref="view3dRef" v-if="viewMode === '3d' && model" :root="model.root" :selected="selected" :cg-x="analysis?.cgX ?? null" :cp-x="analysis?.cpX ?? null" :orientation="orientation" @hover="hoveredComp = $event" @pick="selected = $event" />
           <RocketView2D ref="view2dRef" v-else-if="model" :root="model.root" :selected="selected" :unit-mode="unitMode" :cg-x="analysis?.cgX ?? null" :cp-x="analysis?.cpX ?? null" :orientation="orientation" @hover="hoveredComp = $event" @pick="selected = $event" @change="onPropChanged" />
           <div v-else class="empty-state">
-            <div class="es-title">开始设计你的火箭</div>
+            <div class="es-title">{{ t('app.empty.title') }}</div>
             <div class="es-cards">
               <button class="es-card" @click="newRocket">
                 <span class="es-icon">＋</span>
-                <span class="es-name">新建火箭</span>
-                <span class="es-desc">从空白开始，用上方组件库搭建</span>
+                <span class="es-name">{{ t('app.empty.newRocket') }}</span>
+                <span class="es-desc">{{ t('app.empty.newRocketDesc') }}</span>
               </button>
               <button class="es-card" @click="fileInput?.click()">
                 <span class="es-icon">⇪</span>
-                <span class="es-name">打开 .ork</span>
-                <span class="es-desc">加载已有的 OpenRocket 设计文件</span>
+                <span class="es-name">{{ t('app.empty.openOrk') }}</span>
+                <span class="es-desc">{{ t('app.empty.openOrkDesc') }}</span>
               </button>
             </div>
-            <p class="es-sub">或将 .ork 文件拖入窗口 · 也可用顶部「文件 → 示例设计」快速体验</p>
+            <p class="es-sub">{{ t('app.empty.dragHint') }}</p>
           </div>
         </div>
-        <div class="resize-handle" title="拖拽调整宽度" @mousedown.prevent="startResize('right', $event)"></div>
+        <div class="resize-handle" :title="t('app.resizeW')" @mousedown.prevent="startResize('right', $event)"></div>
         <aside class="prop-col" :style="{ width: rightW + 'px' }">
           <div class="pane-title">
-            <span>属性</span>
+            <span>{{ t('prop.title') }}</span>
             <span v-if="selected" class="prop-type">{{ typeLabelOf(selected) }}</span>
           </div>
           <PropertyPanel :component="selected" :hovered="hoveredComp" :unit-mode="unitMode" @changed="onPropChanged" @remove="removeSelected" />
@@ -1187,13 +1196,13 @@ function stabNote(): string {
 
       <!-- 信息条（官方风格） -->
       <div class="info-bar">
-        <div class="info-item"><span class="i-label">长度</span><span class="i-val">{{ fmtLen2(previewInfo.length) }}</span></div>
-        <div class="info-item"><span class="i-label">最大直径</span><span class="i-val">Ø {{ fmtLen2(previewInfo.diameter) }}</span></div>
-        <div class="info-item"><span class="i-label">质量</span><span class="i-val">{{ previewInfo.mass != null ? fmtMass(previewInfo.mass) : '—' }}</span></div>
-        <div class="info-item"><span class="i-label">远地点</span><span class="i-val">{{ previewInfo.apogee != null ? previewInfo.apogee.toFixed(0) + ' m' : '—' }}</span></div>
-        <div class="info-item"><span class="i-label">最大速度</span><span class="i-val">{{ previewInfo.maxV != null ? previewInfo.maxV.toFixed(1) + ' m/s' : '—' }}</span></div>
-        <div class="info-item"><span class="i-label">重心 CG</span><span class="i-val">{{ previewInfo.cg != null ? fmtLen2(previewInfo.cg) : '—' }}</span></div>
-        <div class="info-item"><span class="i-label">压心 CP</span><span class="i-val">{{ previewInfo.cp != null ? fmtLen2(previewInfo.cp) : '—' }}</span></div>
+        <div class="info-item"><span class="i-label">{{ t('app.status.length') }}</span><span class="i-val">{{ fmtLen2(previewInfo.length) }}</span></div>
+        <div class="info-item"><span class="i-label">{{ t('app.status.maxDia') }}</span><span class="i-val">Ø {{ fmtLen2(previewInfo.diameter) }}</span></div>
+        <div class="info-item"><span class="i-label">{{ t('app.status.mass') }}</span><span class="i-val">{{ previewInfo.mass != null ? fmtMass(previewInfo.mass) : '—' }}</span></div>
+        <div class="info-item"><span class="i-label">{{ t('app.status.apogee') }}</span><span class="i-val">{{ previewInfo.apogee != null ? previewInfo.apogee.toFixed(0) + ' m' : '—' }}</span></div>
+        <div class="info-item"><span class="i-label">{{ t('app.status.maxSpeed') }}</span><span class="i-val">{{ previewInfo.maxV != null ? previewInfo.maxV.toFixed(1) + ' m/s' : '—' }}</span></div>
+        <div class="info-item"><span class="i-label">{{ t('app.status.cg') }}</span><span class="i-val">{{ previewInfo.cg != null ? fmtLen2(previewInfo.cg) : '—' }}</span></div>
+        <div class="info-item"><span class="i-label">{{ t('app.status.cp') }}</span><span class="i-val">{{ previewInfo.cp != null ? fmtLen2(previewInfo.cp) : '—' }}</span></div>
       </div>
     </section>
     </div><!-- /main-row -->
@@ -1202,37 +1211,45 @@ function stabNote(): string {
     <div v-if="settingsOpen" class="settings-overlay" @click.self="settingsOpen = false">
       <div class="settings-panel">
         <div class="settings-head">
-          <span>设置</span>
-          <button class="settings-x" title="关闭" @click="settingsOpen = false">×</button>
+          <span>{{ t('settings.settings') }}</span>
+          <button class="settings-x" :title="t('common.close')" @click="settingsOpen = false">×</button>
         </div>
         <div class="settings-body">
           <aside class="settings-tabs">
-            <button :class="{ on: settingsTab === 'layout' }" @click="settingsTab = 'layout'">布局</button>
-            <button :class="{ on: settingsTab === 'unit' }" @click="settingsTab = 'unit'">单位</button>
-            <button class="soon" disabled>外观<span>即将</span></button>
+            <button :class="{ on: settingsTab === 'layout' }" @click="settingsTab = 'layout'">{{ t('settings.tabLayout') }}</button>
+            <button :class="{ on: settingsTab === 'unit' }" @click="settingsTab = 'unit'">{{ t('settings.tabUnit') }}</button>
+            <button :class="{ on: settingsTab === 'lang' }" @click="settingsTab = 'lang'">{{ t('settings.tabLang') }}</button>
+            <button class="soon" disabled>{{ t('settings.tabAppearance') }}<span>{{ t('settings.soon') }}</span></button>
           </aside>
           <section class="settings-content">
             <template v-if="settingsTab === 'layout'">
-              <div class="set-title">主布局</div>
+              <div class="set-title">{{ t('settings.mainLayout') }}</div>
               <div class="layout-options">
                 <button class="lo" :class="{ on: layoutMode === 'v' }" @click="setLayout('v')">
                   <span class="lo-pic v"><i class="a"></i><i class="b"></i></span>
-                  <span class="lo-txt"><b>上下布局</b><small>功能区在上，预览在下</small></span>
+                  <span class="lo-txt"><b>{{ t('settings.layoutV') }}</b><small>{{ t('settings.layoutVDesc') }}</small></span>
                 </button>
                 <button class="lo" :class="{ on: layoutMode === 'h' }" @click="setLayout('h')">
                   <span class="lo-pic h"><i class="a"></i><i class="b"></i></span>
-                  <span class="lo-txt"><b>左右布局</b><small>功能区在左，预览在右</small></span>
+                  <span class="lo-txt"><b>{{ t('settings.layoutH') }}</b><small>{{ t('settings.layoutHDesc') }}</small></span>
                 </button>
               </div>
             </template>
             <template v-else-if="settingsTab === 'unit'">
-              <div class="set-title">长度单位</div>
+              <div class="set-title">{{ t('settings.lengthUnit') }}</div>
               <div class="unit-options">
-                <button :class="{ on: unitMode === 'm' }" @click="unitMode = 'm'">米（m）</button>
-                <button :class="{ on: unitMode === 'mm' }" @click="unitMode = 'mm'">毫米（mm）</button>
-                <button :class="{ on: unitMode === 'cm' }" @click="unitMode = 'cm'">厘米（cm）</button>
+                <button :class="{ on: unitMode === 'm' }" @click="unitMode = 'm'">{{ t('settings.unitM') }}</button>
+                <button :class="{ on: unitMode === 'mm' }" @click="unitMode = 'mm'">{{ t('settings.unitMM') }}</button>
+                <button :class="{ on: unitMode === 'cm' }" @click="unitMode = 'cm'">{{ t('settings.unitCM') }}</button>
               </div>
-              <p class="set-note">内部数据恒以米存储，单位仅影响界面显示。</p>
+              <p class="set-note">{{ t('settings.unitHint') }}</p>
+            </template>
+            <template v-else-if="settingsTab === 'lang'">
+              <div class="set-title">{{ t('settings.lang') }}</div>
+              <div class="unit-options">
+                <button :class="{ on: locale === 'zh' }" @click="setLang('zh')">{{ t('common.zh') }}</button>
+                <button :class="{ on: locale === 'en' }" @click="setLang('en')">{{ t('common.en') }}</button>
+              </div>
             </template>
           </section>
         </div>

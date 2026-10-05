@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // 示例面板：Web 内置示例 + OpenRocket 官方示例（带真实构成介绍 + 实时 2D 缩略图），模态展示
 import { onMounted, reactive, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { PRESETS } from '../lib/presets';
 import { parseOrk } from '../lib/orkParser';
 import ExampleThumb from './ExampleThumb.vue';
@@ -10,6 +11,7 @@ const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: []; loadPreset: [name: string]; loadOfficial: [file: string] }>();
 // 部署路径基准（GH Pages 子路径部署兼容）
 const base = import.meta.env.BASE_URL;
+const { t } = useI18n();
 
 /** 统计一个组件树（用于内置示例真实构成） */
 function statTree(root: { type: string; children: unknown[] }): { total: number; types: string[] } {
@@ -97,48 +99,48 @@ function esc(e: KeyboardEvent): void {
           <div class="ex-title">
             <img :src="base + 'ork-assets/logo/openrocket-256.png'" alt="OpenRocket" class="ex-logo" />
             <div>
-              <h3>示例设计</h3>
-              <p>从内置或 OpenRocket 官方示例开始，一键加载快速测试</p>
+              <h3>{{ t('examples.title') }}</h3>
+              <p>{{ t('examples.subtitle') }}</p>
             </div>
           </div>
-          <button class="ex-close" title="关闭（Esc）" @click="close">✕</button>
+          <button class="ex-close" :title="t('common.close') + '（Esc）'" @click="close">✕</button>
         </div>
         <div class="ex-tabs">
-          <button :class="{ on: tab === 'builtin' }" @click="tab = 'builtin'">Web 内置（{{ builtin.length }}）</button>
-          <button :class="{ on: tab === 'official' }" @click="tab = 'official'">OpenRocket 官方（{{ official.length }}）</button>
+          <button :class="{ on: tab === 'builtin' }" @click="tab = 'builtin'">{{ t('examples.builtin', { n: builtin.length }) }}</button>
+          <button :class="{ on: tab === 'official' }" @click="tab = 'official'">{{ t('examples.official', { n: official.length }) }}</button>
         </div>
         <div class="ex-body">
           <template v-if="tab === 'builtin'">
             <button v-for="(p, i) in builtin" :key="p.name" class="ex-card" @click="emit('loadPreset', PRESETS[i].name)">
               <ExampleThumb :root="p.root" />
               <div class="ex-card-main">
-                <span class="ex-name">{{ p.name }}</span>
-                <span v-if="p.badge" class="ex-badge">{{ p.badge }}</span>
-                <span class="ex-meta">共 {{ p.total }} 个组件 · {{ p.kinds }} 类</span>
+                <span class="ex-name">{{ t('examples.builtinNames.' + i) }}</span>
+                <span v-if="p.badge" class="ex-badge">{{ t('examples.defaultBadge') }}</span>
+                <span class="ex-meta">{{ t('examples.meta', { total: p.total, kinds: p.kinds }) }}</span>
               </div>
-              <span class="ex-desc">{{ p.desc }}</span>
-              <span class="ex-load">加载 →</span>
+              <span class="ex-desc">{{ t('examples.builtinDescs.' + i) }}</span>
+              <span class="ex-load">{{ t('examples.load') }}</span>
             </button>
           </template>
           <template v-else>
-            <button v-for="o in official" :key="o.file" class="ex-card" @click="emit('loadOfficial', o.file)">
+            <button v-for="(o, i) in official" :key="o.file" class="ex-card" @click="emit('loadOfficial', o.file)">
               <div class="ex-thumb-box">
                 <ExampleThumb v-if="o.root" :root="o.root" />
-                <span v-else class="ex-thumb-ph">{{ o.loading ? '解析中…' : '◌' }}</span>
+                <span v-else class="ex-thumb-ph">{{ o.loading ? t('common.loading') : '◌' }}</span>
               </div>
               <div class="ex-card-main">
-                <span class="ex-name">{{ o.zh }}</span>
-                <span class="ex-meta">{{ o.total }} 组件 · {{ o.lenM }} mm · Ø{{ o.dia }} mm</span>
+                <span class="ex-name">{{ t('examples.officialNames.' + i) }}</span>
+                <span class="ex-meta">{{ o.total }} · {{ o.lenM }} mm · Ø{{ o.dia }} mm</span>
               </div>
-              <span class="ex-desc">{{ o.intro }}</span>
+              <span class="ex-desc">{{ t('examples.officialIntros.' + i) }}</span>
               <span class="ex-file">{{ o.file }}.ork</span>
-              <span class="ex-load">加载 →</span>
+              <span class="ex-load">{{ t('examples.load') }}</span>
             </button>
           </template>
         </div>
         <div class="ex-foot">
-          <span>官方示例为 OpenRocket 自带的 16 个 .ork 设计，构成数据来自官方文件实解析</span>
-          <button class="ex-foot-btn" @click="close">关闭</button>
+          <span>{{ t('examples.officialSource') }}</span>
+          <button class="ex-foot-btn" @click="close">{{ t('common.close') }}</button>
         </div>
       </div>
     </div>
