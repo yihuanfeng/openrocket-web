@@ -328,26 +328,26 @@ watch(chartEl, (el) => { if (el && detailSpec.value) renderCurve(detailSpec.valu
 </script>
 
 <style scoped>
-.db-page { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--bg, #07121f); color: #d8ecff; color-scheme: dark; }
-.db-top { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line, #12314f); flex-wrap: wrap; }
+.db-page { display: flex; flex-direction: column; height: 100%; min-height: 0; background: #07121f; color: #d8ecff; color-scheme: dark; }
+.db-top { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid #12314f; flex-wrap: wrap; }
 .db-back { flex-shrink: 0; }
 .db-title { font-size: 14px; font-weight: 700; color: #e8f4ff; display: flex; flex-direction: column; margin-right: 6px; }
 .db-title-sub { font-size: 10.5px; color: #6f96b5; font-weight: 400; }
 .db-top-filters { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1; min-width: 0; }
-.db-search { width: 220px; padding: 5px 8px; background: var(--bg2, #0a1a2b); border: 1px solid var(--line, #12314f); color: #d8ecff; font-size: 12px; }
+.db-search { width: 220px; padding: 5px 8px; background: #0a1a2b; border: 1px solid #12314f; color: #d8ecff; font-size: 12px; }
 .db-search::placeholder, .db-num::placeholder { color: #6f96b5; }
-.db-sel { padding: 5px 6px; background: var(--bg2, #0a1a2b); border: 1px solid var(--line, #12314f); color: #cfe6ff; font-size: 12px; }
+.db-sel { padding: 5px 6px; background: #0a1a2b; border: 1px solid #12314f; color: #cfe6ff; font-size: 12px; }
 .db-chips { display: flex; flex-wrap: wrap; gap: 3px; }
 .db-chip { font-size: 11px; padding: 3px 7px; background: transparent; border: 1px solid #1c4a73; color: #8fb8d9; cursor: pointer; }
 .db-chip.on { background: #1668c7; border-color: #1668c7; color: #fff; }
-.db-num { width: 60px; padding: 5px 6px; background: var(--bg2, #0a1a2b); border: 1px solid var(--line, #12314f); color: #cfe6ff; font-size: 12px; }
+.db-num { width: 60px; padding: 5px 6px; background: #0a1a2b; border: 1px solid #12314f; color: #cfe6ff; font-size: 12px; }
 .db-dia-sep { color: #5a7f9d; }
 .db-reset { flex-shrink: 0; }
 .db-count { font-size: 12px; color: #7ea6c2; flex-shrink: 0; }
 
 .db-table-wrap { flex: 1; overflow: auto; min-height: 0; }
 .db-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.db-th { text-align: left; padding: 7px 8px; background: #0c2036; color: #9fc0da; font-weight: 600; border-bottom: 1px solid var(--line, #12314f); position: sticky; top: 0; z-index: 1; white-space: nowrap; user-select: none; }
+.db-th { text-align: left; padding: 7px 8px; background: #0c2036; color: #9fc0da; font-weight: 600; border-bottom: 1px solid #12314f; position: sticky; top: 0; z-index: 1; white-space: nowrap; user-select: none; }
 .db-th.sortable { cursor: pointer; }
 .db-th.sortable:hover { color: #d8ecff; }
 .db-th.asc, .db-th.desc { color: #2f9bff; }
@@ -363,11 +363,11 @@ watch(chartEl, (el) => { if (el && detailSpec.value) renderCurve(detailSpec.valu
 .db-add-row.saved { opacity: 0.7; }
 .db-empty { text-align: center; padding: 24px; color: #6f96b5; }
 
-.db-pager { display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-top: 1px solid var(--line, #12314f); }
+.db-pager { display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-top: 1px solid #12314f; }
 .db-page { font-size: 12px; color: #9fc0da; }
 .db-page-size { width: 64px; }
 
-.db-detail { display: none; border-top: 1px solid var(--line, #12314f); background: #0a1a2b; }
+.db-detail { display: none; border-top: 1px solid #12314f; background: #0a1a2b; }
 .db-detail.open { display: block; }
 .db-detail-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; }
 .db-d-name { font-size: 16px; font-weight: 700; color: #e8f4ff; }
