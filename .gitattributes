@@ -1,0 +1,3 @@
+# GitHub 语言统计修正：OpenRocket 组件数据库 .orc 是第三方厂商数据（XML 格式），
+# 误被识别为 CSound 音频语言，全部排除出项目语言统计
+*.orc linguist-vendored
