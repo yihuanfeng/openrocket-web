@@ -399,6 +399,8 @@ function draw(): void {
   ctx.restore();
 
   // 变换 + 深度排序（轨道球：先绕竖直轴 yaw，再绕屏幕水平轴 pitch，任意方向自由旋转）
+  // 投影后按包围盒居中——旋转锚点为火箭中心而非鼻尖
+  const rawPts: Array<{ t: Tri; pr: { x: number; y: number; depth: number }[] }> = [];
   for (const t of tris) {
     const pr = t.pts.map(([x, y, z]) => {
       const cY = Math.cos(rotY), sY = Math.sin(rotY);
@@ -407,14 +409,29 @@ function draw(): void {
       const y2 = y * c2 - z1 * s2, z2 = y * s2 + z1 * c2; // 绕水平轴（pitch）：y-z 平面
       if (isH.value) {
         // 横版：旋转后轴向（z2）→ 屏幕 x（头朝左），半径 → 屏幕 y；深度取 x1（屏幕法线残余）
-        return { x: cxp - maxZ * unit * 0.5 + z2 * unit, y: baseY + y2 * unit, depth: x1 };
+        return { x: z2 * unit, y: y2 * unit, depth: x1 };
       }
       // 竖版：yaw 后 x1 → 屏幕 x，轴向（z2）→ 屏幕 y；深度取 y2（视线残余）
-      return { x: cxp + x1 * unit, y: baseY + z2 * unit, depth: y2 };
+      return { x: x1 * unit, y: z2 * unit, depth: y2 };
     });
+    rawPts.push({ t, pr });
+  }
+  let bMinX = Infinity, bMaxX = -Infinity, bMinY = Infinity, bMaxY = -Infinity;
+  for (const { pr } of rawPts) {
+    for (const p of pr) {
+      if (p.x < bMinX) bMinX = p.x; if (p.x > bMaxX) bMaxX = p.x;
+      if (p.y < bMinY) bMinY = p.y; if (p.y > bMaxY) bMaxY = p.y;
+    }
+  }
+  const cy0 = isH.value ? cyp : baseY + maxZ * unit * 0.5; // 竖版目标中心：火箭全长中点
+  const offX = cxp - (bMinX + bMaxX) / 2;
+  const offY = cy0 - (bMinY + bMaxY) / 2;
+  for (const { t, pr } of rawPts) {
+    for (const p of pr) { p.x += offX; p.y += offY; }
     t.depth = (pr[0].depth + pr[1].depth + pr[2].depth) / 3;
     t.proj = pr;
   }
+  const bounds = { minX: bMinX + offX, maxX: bMaxX + offX, minY: bMinY + offY, maxY: bMaxY + offY };
   tris.sort((a, b) => a.depth - b.depth);
 
   lastTris.length = 0;
@@ -476,14 +493,14 @@ function draw(): void {
   // CG / CP 位置标记：中心轴上点随旋转矩阵投影（拖动视角时标记跟随火箭），标签引到侧旁避免遮挡
   const c = ctx;
   const marks: { x: number; y: number; kind: string; z: number }[] = [];
-  // 与主渲染同一轨道球投影（中心轴 x=0,y=0 的点）
+  // 与主渲染同一轨道球投影 + 同一居中偏移（中心轴 x=0,y=0 的点）
   const projAxis = (z: number) => {
     const cY = Math.cos(rotY), sY = Math.sin(rotY);
     const c2 = Math.cos(tilt), s2 = Math.sin(tilt);
     const x1 = z * sY, z1 = z * cY; // (0,0,z) 绕竖直轴
     const y2 = -z1 * s2, z2 = z1 * c2; // 绕水平轴
-    if (isH.value) return { x: cxp - maxZ * unit * 0.5 + z2 * unit, y: baseY + y2 * unit };
-    return { x: cxp + x1 * unit, y: baseY + z2 * unit };
+    if (isH.value) return { x: offX + z2 * unit, y: offY + y2 * unit };
+    return { x: offX + x1 * unit, y: offY + z2 * unit };
   };
   const mk = (z: number, color: string, label: string) => {
     if (!(z >= 0 && z <= maxZ)) return;
@@ -590,38 +607,36 @@ function draw(): void {
   c.textAlign = 'center';
   c.fillText(t('view3d.refFrame'), ox, oy + 18);
 
-  // 尺寸标注：总长 + 最大直径（竖版在底部；横版在顶部）
+  // 尺寸标注：总长 + 最大直径（锚定旋转后包围盒边缘，随火箭视角跟随）
   ctx.fillStyle = 'rgba(210,228,255,0.9)';
   ctx.font = '500 11px -apple-system, "SF Pro Text", "PingFang SC", sans-serif';
   ctx.textAlign = 'left';
   if (isH.value) {
-    const tipY = cyp - maxR.value * unit - 40;
-    ctx.fillText(`⏤ ${maxZ.toFixed(3)} m`, cxp - maxZ * unit * 0.5, tipY);
+    const tipY = bounds.minY - 14;
+    ctx.fillText(`⏤ ${maxZ.toFixed(3)} m`, bounds.minX, tipY);
     ctx.strokeStyle = 'rgba(210,228,255,0.4)';
     ctx.lineWidth = 1;
-    const diaX = cxp + maxZ * unit * 0.5 + 16;
-    const diaY = maxR.value * unit;
+    const diaX = bounds.maxX + 16;
     ctx.beginPath();
-    ctx.moveTo(diaX, cyp - diaY); ctx.lineTo(diaX, cyp + diaY);
-    ctx.moveTo(diaX - 4, cyp - diaY); ctx.lineTo(diaX + 4, cyp - diaY);
-    ctx.moveTo(diaX - 4, cyp + diaY); ctx.lineTo(diaX + 4, cyp + diaY);
+    ctx.moveTo(diaX, bounds.minY); ctx.lineTo(diaX, bounds.maxY);
+    ctx.moveTo(diaX - 4, bounds.minY); ctx.lineTo(diaX + 4, bounds.minY);
+    ctx.moveTo(diaX - 4, bounds.maxY); ctx.lineTo(diaX + 4, bounds.maxY);
     ctx.stroke();
     ctx.fillStyle = 'rgba(210,228,255,0.75)';
-    ctx.fillText(`⌀ ${(maxR.value * 2 * 1000).toFixed(0)} mm`, diaX + 8, cyp);
+    ctx.fillText(`⌀ ${(maxR.value * 2 * 1000).toFixed(0)} mm`, diaX + 8, (bounds.minY + bounds.maxY) / 2);
   } else {
-    const tipY = baseY + maxZ * unit + 6;
-    ctx.fillText(`⏤ ${maxZ.toFixed(3)} m`, cxp + maxR.value * unit + 14, tipY + 4);
+    const tipX = bounds.maxX + 14;
+    ctx.fillText(`⏤ ${maxZ.toFixed(3)} m`, tipX, bounds.maxY + 4);
     ctx.strokeStyle = 'rgba(210,228,255,0.4)';
     ctx.lineWidth = 1;
-    const diaY = baseY + maxZ * unit + 22;
-    const diaX = maxR.value * unit + 10;
+    const diaY = bounds.maxY + 22;
     ctx.beginPath();
-    ctx.moveTo(cxp - diaX, diaY); ctx.lineTo(cxp + diaX, diaY);
-    ctx.moveTo(cxp - diaX, diaY - 4); ctx.lineTo(cxp - diaX, diaY + 4);
-    ctx.moveTo(cxp + diaX, diaY - 4); ctx.lineTo(cxp + diaX, diaY + 4);
+    ctx.moveTo(bounds.minX, diaY); ctx.lineTo(bounds.maxX, diaY);
+    ctx.moveTo(bounds.minX, diaY - 4); ctx.lineTo(bounds.minX, diaY + 4);
+    ctx.moveTo(bounds.maxX, diaY - 4); ctx.lineTo(bounds.maxX, diaY + 4);
     ctx.stroke();
     ctx.fillStyle = 'rgba(210,228,255,0.75)';
-    ctx.fillText(`⌀ ${(maxR.value * 2 * 1000).toFixed(0)} mm`, cxp + diaX + 8, diaY + 3);
+    ctx.fillText(`⌀ ${(maxR.value * 2 * 1000).toFixed(0)} mm`, bounds.maxX + 8, diaY + 3);
   }
 
   // 底部状态行
