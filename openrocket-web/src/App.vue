@@ -1357,7 +1357,10 @@ function stabNote(): string {
 .main-row.layout-h .canvas-wrap { min-width: 0; }
 
 /* 顶栏设置按钮 */
-.settings-btn { font-size: 15px; line-height: 1; padding: 6px 9px; }
+.settings-btn {
+  font-size: 19px; line-height: 1; padding: 6px 11px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
 .settings-btn.active { background: rgba(255, 255, 255, 0.18); }
 
 /* —— 设置面板：左侧 tabs + 内容 —— */
