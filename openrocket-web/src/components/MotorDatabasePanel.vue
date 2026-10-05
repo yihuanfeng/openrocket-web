@@ -54,7 +54,7 @@
             <td class="db-td-num">{{ e.mt.toFixed(1) }}</td>
             <td class="db-td-num">{{ e.bt.toFixed(1) }}</td>
             <td class="db-td-num">{{ delaysToList(e.del).join('/') || '—' }}</td>
-            <td class="db-td-num">{{ e.w0 }}</td>
+            <td class="db-td-num">{{ fmtW(e.w0) }}</td>
             <td class="db-td-num">{{ e.files.length }}</td>
             <td class="db-td-act">
               <button
@@ -99,7 +99,7 @@
                 <span class="db-mk">{{ t('db.meta.thrust') }}</span><b>{{ selected.at }} / {{ selected.mt }} N</b>
                 <span class="db-mk">{{ t('db.meta.burn') }}</span><b>{{ selected.bt }}s</b>
                 <span class="db-mk">{{ t('db.meta.delays') }}</span><b>{{ selected.del || '—' }}</b>
-                <span class="db-mk">{{ t('db.meta.weight') }}</span><b>{{ selected.w0 }}g</b>
+                <span class="db-mk">{{ t('db.meta.weight') }}</span><b>{{ fmtW(selected.w0) }}g</b>
                 <span class="db-mk">{{ t('db.meta.type') }}</span><b>{{ t('db.motorType.' + selected.t) || selected.t }}</b>
                 <span class="db-mk">{{ t('db.meta.case') }}</span><b>{{ selected.ci || '—' }}</b>
                 <span class="db-mk">{{ t('db.meta.prop') }}</span><b>{{ selected.pi || '—' }}</b>
@@ -232,6 +232,7 @@ function isSaved(e: MotorIndexEntry): boolean {
   return props.savedMotors.some((m) => m.id === `db-${e.id}` || m.id.startsWith(`db-${e.id}`));
 }
 function fmtImp(v: number): string { return v >= 100 ? v.toFixed(0) : v.toFixed(1); }
+function fmtW(v: number): string { return Math.round(v).toString(); }
 
 function select(e: MotorIndexEntry) {
   selected.value = e;

@@ -2,7 +2,11 @@
 
 [OpenRocket](https://github.com/openrocket/openrocket)（Java 开源火箭模拟器）的 **Vue3 + TypeScript 纯前端 Web 重构版**。无需安装、无需后端、无需本地 Java，浏览器打开即用。
 
-在线预览：本地 `npm run preview` 后访问 http://localhost:4173/
+**在线预览**：https://yihuanfeng.github.io/openrocket-web/ （GitHub Pages 自动部署）
+
+![主界面（火箭设计与 2D/3D 预览）](docs/screenshot-main.png)
+
+![发动机库（motor-database 1076 款实测，顶部筛选 + 可排序表格）](docs/screenshot-motors.png)
 
 ## 功能
 
