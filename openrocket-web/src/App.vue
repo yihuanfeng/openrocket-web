@@ -568,6 +568,17 @@ function onPanelMotorChange(id: string): void {
   if (!path) return; // 非发动机座组件（如普通 innertube 无 motormount 标记），仅保留属性
   setMountMotor(path, id || null);
 }
+/** 模拟发射 tab 快捷选发动机：写入当前配置第一个发动机座（与配置面板同一数据通路），等效官方「发射台快捷换发动机」 */
+function onSimMotorChange(m: MotorSpec): void {
+  if (!model.value) return;
+  const cfg = activeConfig();
+  const first = cfg.mounts.find((mc) => mc.motorId) ?? cfg.mounts[0];
+  if (first) {
+    first.motorId = m.id;
+    scheduleAutoSave();
+    scheduleAnalyze();
+  }
+}
 /** 主发动机（当前配置第一个非空发动机座）——仿真面板 / 顶部默认展示用 */
 const primaryMotor = computed<MotorSpec>(() => {
   const cfg = activeConfig();
@@ -1265,6 +1276,7 @@ function stabNote(): string {
             :compare-rows="compareRows"
             :compare-loading="compareLoading"
             @motor-import="onMotorImport"
+            @motor-change="onSimMotorChange"
             @conditions-change="(c: SimConditions) => (simConditions = c)"
             @optimize-delay="runOptimizeDelay"
             @compare-all="runCompareAll"
