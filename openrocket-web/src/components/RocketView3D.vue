@@ -310,8 +310,8 @@ function onCvMove(e: MouseEvent): void {
 }
 const lastTris: Tri[] = [];
 let ctx: CanvasRenderingContext2D | null = null;
-let rotY = 0.6;
-let tilt = 0.38;
+let rotY = 0;
+let tilt = 0.02;
 let scale = 1;
 let dragging = false;
 let lastX = 0, lastY = 0;
@@ -326,7 +326,7 @@ const VIEW_PRESETS = {
   side: { rotY: 0, tilt: 0.02 },
   top: { rotY: Math.PI / 2, tilt: 1.42 },
 } as const;
-const viewPreset = ref<'iso' | 'front' | 'side' | 'top'>('iso');
+const viewPreset = ref<'iso' | 'front' | 'side' | 'top'>('side');
 let presetAnim = 0;
 function setViewPreset(p: 'iso' | 'front' | 'side' | 'top'): void {
   if (viewPreset.value === p) return;
@@ -473,52 +473,44 @@ function draw(): void {
     }
   }
 
-  // CG / CP 位置标记（竖版侧面竖线；横版顶部垂线）
+  // CG / CP 位置标记：中心轴上点随旋转矩阵投影（拖动视角时标记跟随火箭），标签引到侧旁避免遮挡
   const c = ctx;
   const marks: { x: number; y: number; kind: string; z: number }[] = [];
+  // 与主渲染同一轨道球投影（中心轴 x=0,y=0 的点）
+  const projAxis = (z: number) => {
+    const cY = Math.cos(rotY), sY = Math.sin(rotY);
+    const c2 = Math.cos(tilt), s2 = Math.sin(tilt);
+    const x1 = z * sY, z1 = z * cY; // (0,0,z) 绕竖直轴
+    const y2 = -z1 * s2, z2 = z1 * c2; // 绕水平轴
+    if (isH.value) return { x: cxp - maxZ * unit * 0.5 + z2 * unit, y: baseY + y2 * unit };
+    return { x: cxp + x1 * unit, y: baseY + z2 * unit };
+  };
   const mk = (z: number, color: string, label: string) => {
     if (!(z >= 0 && z <= maxZ)) return;
-    const ax = axPos3(z);
-    const perp = isH.value ? cyp - maxR.value * unit - 18 : cxp + (maxR.value * unit + 14);
-    if (isH.value) marks.push({ x: ax, y: perp, kind: label, z });
-    else marks.push({ x: perp, y: ax, kind: label, z });
+    const p = projAxis(z);
+    // 标签/圆点偏移方向：横版引向上方，竖版引向右侧，避免盖在火箭本体上
+    const lx = isH.value ? p.x : p.x + maxR.value * unit + 14;
+    const ly = isH.value ? p.y - maxR.value * unit - 14 : p.y;
+    marks.push({ x: lx, y: ly, kind: label, z });
     c.strokeStyle = color;
     c.lineWidth = 1.6;
     c.setLineDash([4, 3]);
     c.beginPath();
-    if (isH.value) {
-      c.moveTo(ax, cyp - maxR.value * unit - 4);
-      c.lineTo(ax, cyp + maxR.value * unit + 10);
-      c.stroke();
-      c.setLineDash([]);
-      c.fillStyle = color;
-      c.beginPath();
-      c.arc(ax, perp, 4.5, 0, Math.PI * 2);
-      c.fill();
-      c.strokeStyle = 'rgba(255,255,255,0.9)';
-      c.lineWidth = 1.5;
-      c.stroke();
-      c.fillStyle = color;
-      c.font = '600 11px -apple-system, "SF Pro Text", "PingFang SC", sans-serif';
-      c.textAlign = 'center';
-      c.fillText(`${label} ${z.toFixed(3)} m`, ax, perp - 8);
-    } else {
-      c.moveTo(perp, ax);
-      c.lineTo(perp, baseY + maxZ * unit + 10);
-      c.stroke();
-      c.setLineDash([]);
-      c.fillStyle = color;
-      c.beginPath();
-      c.arc(perp, ax, 4.5, 0, Math.PI * 2);
-      c.fill();
-      c.strokeStyle = 'rgba(255,255,255,0.9)';
-      c.lineWidth = 1.5;
-      c.stroke();
-      c.fillStyle = color;
-      c.font = '600 11px -apple-system, "SF Pro Text", "PingFang SC", sans-serif';
-      c.textAlign = perp > cxp ? 'left' : 'right';
-      c.fillText(`${label} ${z.toFixed(3)} m`, perp + (perp > cxp ? 10 : -10), ax + 4);
-    }
+    c.moveTo(p.x, p.y);
+    c.lineTo(lx, ly);
+    c.stroke();
+    c.setLineDash([]);
+    c.fillStyle = color;
+    c.beginPath();
+    c.arc(lx, ly, 4.5, 0, Math.PI * 2);
+    c.fill();
+    c.strokeStyle = 'rgba(255,255,255,0.9)';
+    c.lineWidth = 1.5;
+    c.stroke();
+    c.fillStyle = color;
+    c.font = '600 11px -apple-system, "SF Pro Text", "PingFang SC", sans-serif';
+    c.textAlign = isH.value ? 'center' : 'left';
+    c.fillText(`${label} ${z.toFixed(3)} m`, lx + (isH.value ? 0 : 10), ly + (isH.value ? -8 : 4));
   };
   if (props.cgX !== null && props.cgX !== undefined) mk(props.cgX, '#34c759', 'CG');
   if (props.cpX !== null && props.cpX !== undefined) mk(props.cpX, '#ff3b30', 'CP');
