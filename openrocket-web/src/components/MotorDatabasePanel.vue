@@ -328,13 +328,14 @@ watch(chartEl, (el) => { if (el && detailSpec.value) renderCurve(detailSpec.valu
 </script>
 
 <style scoped>
-.db-page { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--bg, #07121f); color: #d8ecff; }
+.db-page { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--bg, #07121f); color: #d8ecff; color-scheme: dark; }
 .db-top { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line, #12314f); flex-wrap: wrap; }
 .db-back { flex-shrink: 0; }
 .db-title { font-size: 14px; font-weight: 700; color: #e8f4ff; display: flex; flex-direction: column; margin-right: 6px; }
 .db-title-sub { font-size: 10.5px; color: #6f96b5; font-weight: 400; }
 .db-top-filters { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1; min-width: 0; }
 .db-search { width: 220px; padding: 5px 8px; background: var(--bg2, #0a1a2b); border: 1px solid var(--line, #12314f); color: #d8ecff; font-size: 12px; }
+.db-search::placeholder, .db-num::placeholder { color: #6f96b5; }
 .db-sel { padding: 5px 6px; background: var(--bg2, #0a1a2b); border: 1px solid var(--line, #12314f); color: #cfe6ff; font-size: 12px; }
 .db-chips { display: flex; flex-wrap: wrap; gap: 3px; }
 .db-chip { font-size: 11px; padding: 3px 7px; background: transparent; border: 1px solid #1c4a73; color: #8fb8d9; cursor: pointer; }

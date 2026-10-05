@@ -1073,7 +1073,6 @@ function exportPdf(): void {
 <title>${m.name} — 设计报告</title>
 <style>
   @page { size: A4; margin: 14mm; }
-  .db-screen { position: fixed; inset: 0; z-index: 60; background: #07121f; }
   body { font: 11px/1.5 -apple-system, "PingFang SC", sans-serif; color: #1d1d1f; margin: 0; }
   h1 { font-size: 20px; margin: 0 0 2px; }
   .meta { color: #6e6e73; font-size: 11px; margin-bottom: 14px; }
@@ -1458,6 +1457,8 @@ function stabNote(): string {
 
 <style scoped>
 /* —— Apple HIG × Figma 规范：三栏工作台 —— */
+/* 发动机库独立页面：全屏覆盖主布局 */
+.db-screen { position: fixed; inset: 0; z-index: 60; background: #07121f; }
 .app {
   display: flex; flex-direction: column; height: 100vh; width: 100%;
   font-family: var(--sans); color: var(--text); background: var(--bg);
