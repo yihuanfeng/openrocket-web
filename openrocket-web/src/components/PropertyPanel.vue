@@ -7,10 +7,11 @@ import { MATERIALS, TUBES, SURFACES, nearestTube } from '../lib/materials';
 import { MOTORS } from '../lib/engines';
 
 const { t } = useI18n();
-const props = defineProps<{ component: RocketComponent | null; hovered?: RocketComponent | null; unitMode?: 'm' | 'mm' | 'cm' }>();
+const props = defineProps<{ component: RocketComponent | null; hovered?: RocketComponent | null; unitMode?: 'm' | 'mm' | 'cm'; motors?: typeof MOTORS }>();
 const emit = defineEmits<{
   (e: 'changed'): void;
   (e: 'remove'): void;
+  (e: 'motorIdChange', id: string): void;
 }>();
 
 // 可编辑数值字段（key, i18n label key, 单位；finset 参数存 properties，其余为组件字段）
@@ -233,10 +234,20 @@ const readOnlyItems = computed<Array<[string, string]>>(() => {
           <tr v-if="showMotor">
             <td class="k">{{ t('prop.motor') }}</td>
             <td class="v">
-              <select class="sel" :value="component.properties['motorId'] || ''" @change="onPropChange('motorId', $event)">
+              <select
+                class="sel"
+                :value="component.properties['motorId'] || ''"
+                @change="
+                  (e) => {
+                    onPropChange('motorId', e);
+                    emit('motorIdChange', (e.target as HTMLSelectElement).value);
+                  }
+                "
+              >
                 <option value="">{{ t('prop.motorDefault') }}</option>
-                <option v-for="m in MOTORS" :key="m.id" :value="m.id">{{ m.name }}（{{ m.class }} · {{ m.totalImpulseNs.toFixed(1) }} N·s · {{ t('sim.delay', { d: m.delay }) }}）</option>
+                <option v-for="m in props.motors ?? MOTORS" :key="m.id" :value="m.id">{{ m.name }}（{{ m.class }} · {{ m.totalImpulseNs.toFixed(1) }} N·s · {{ t('sim.delay', { d: m.delay }) }}）</option>
               </select>
+              <span class="motor-note">{{ t('prop.motorNote') }}</span>
             </td>
           </tr>
           <tr v-if="showTube">
@@ -314,6 +325,7 @@ td { padding: 6px 4px; vertical-align: middle; }
 .num:focus { outline: none; border-color: var(--primary); box-shadow: var(--focus-ring); }
 .num.invalid { border-color: var(--red); box-shadow: 0 0 0 2px rgba(255, 59, 48, 0.18); }
 .sel { padding: 4px 6px; border: 1px solid var(--border); border-radius: var(--r-sm); font-size: 13px; }
+.motor-note { display: block; font-size: 10px; color: var(--text-3); margin-top: 3px; line-height: 1.4; }
 .unit { color: var(--text-3); margin-left: 4px; font-size: 11px; }
 .empty { color: var(--text-3); padding: 14px; text-align: center; background: #fff; border: 1px dashed var(--border); border-radius: 10px; }
 </style>

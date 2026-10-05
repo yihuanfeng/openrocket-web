@@ -142,6 +142,13 @@ export const MOTORS: MotorSpec[] = [
     source: 'ThrustCurve 认证：C11 10.0 N·s / 16.7 N / 0.8 s；重量近似 29.5 g',
   },
   {
+    id: 'c5-3', name: 'C5-3', class: 'C', diameterMM: 18, lengthMM: 70,
+    delay: 3, burnTime: 1.85, maxThrust: 20.4, totalImpulseNs: 10.0,
+    mass0: 0.0236, mass1: 0.0126, propellant: 0.011,
+    curve: buildCurve(10.0, 20.4, 1.85),
+    source: 'Estes 官方（estesrockets.com）：10.0 N·s / 20.4 N / 1.85 s / 延迟 3 s；23.6 g，推进剂 11 g。ThrustCurve 实测认证总冲 7.8 N·s，两者口径不同',
+  },
+  {
     id: 'c11-5', name: 'C11-5', class: 'C', diameterMM: 18, lengthMM: 70,
     delay: 5, burnTime: 0.8, maxThrust: 16.7, totalImpulseNs: 10.0,
     mass0: 0.0295, mass1: 0.017, propellant: 0.0125,

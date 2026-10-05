@@ -20,7 +20,7 @@ import ComponentLibrary from './components/ComponentLibrary.vue';
 import MotorConfigPanel from './components/MotorConfigPanel.vue';
 import { makeComponent } from './lib/componentFactory';
 import { PRESETS } from './lib/presets';
-import { modelToOrkBlob } from './lib/orkSerializer';
+import { modelToOrkBlob, type OrkWebMeta } from './lib/orkSerializer';
 
 const { t, locale } = useI18n();
 const viewMode = ref<'2d' | '3d'>('2d');
@@ -86,31 +86,21 @@ function startVResize(e: MouseEvent): void {
   window.addEventListener('mouseup', onUp);
 }
 
-// —— 配置重命名 / 复制（发动机配置 Tab）——
-function renameConfig(id: string, name: string): void {
-  const c = configs.value.find((x) => x.id === id);
-  if (c) { c.name = name; scheduleAutoSave(); }
-}
-function copyConfig(): void {
-  const cur = configs.value.find((c) => c.id === currentConfigId.value);
-  if (!cur) return;
-  const n = configs.value.length + 1;
-  const id = 'cfg-' + Date.now().toString(36);
-  configs.value.push({ id, name: `配置 ${n}`, motorId: cur.motorId });
-  currentConfigId.value = id;
-  scheduleAutoSave();
-}
-
-// —— 电机座列表（发动机配置 Tab）——
-function motorMounts(): RocketComponent[] {
+// —— 电机座路径定位（发动机配置 Tab 用）——
+function mountCandidates(root: RocketComponent): RocketComponent[] {
   const out: RocketComponent[] = [];
-  const walk = (c: RocketComponent) => {
-    if (c.type === 'innertube') out.push(c);
-    else if (c.type === 'bodytube' && c.properties?.['motormount'] === 'true') out.push(c);
-    for (const ch of c.children ?? []) walk(ch);
+  const walk = (c: RocketComponent, path: number[]) => {
+    if (c.type === 'innertube' || (c.type === 'bodytube' && c.properties?.['motormount'] === 'true')) {
+      (c as unknown as { __mPath?: string }).__mPath = path.join('.');
+      out.push(c);
+    }
+    for (let i = 0; i < (c.children ?? []).length; i++) walk(c.children[i], [...path, i]);
   };
-  if (model.value) walk(model.value.root);
+  walk(root, []);
   return out;
+}
+function mountPathOf(c: RocketComponent): string {
+  return (c as unknown as { __mPath?: string }).__mPath ?? '';
 }
 
 // —— 预览信息条（官方风格：长度/直径/质量/远地点/速度/稳定度/CG/CP）——
@@ -175,7 +165,13 @@ function saveAuto(): void {
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
   if (!model.value) return;
   try {
-    localStorage.setItem(AUTO_KEY, JSON.stringify(toRaw(model.value)));
+    // P0-2：飞行配置与自定义电机随设计一起持久化
+    const payload = {
+      model: toRaw(model.value),
+      configs: configs.value.map((c) => ({ id: c.id, name: c.name, mounts: c.mounts.map((m) => ({ ...m })) })),
+      customMotors: customMotors.value,
+    };
+    localStorage.setItem(AUTO_KEY, JSON.stringify(payload));
     localStorage.setItem(AUTO_TIME_KEY, String(Date.now()));
     dirty.value = false;
   } catch (e) {
@@ -186,13 +182,24 @@ function restoreAuto(): void {
   const raw = localStorage.getItem(AUTO_KEY);
   if (!raw) return;
   try {
-    const m = JSON.parse(raw) as RocketModel;
+    const parsed = JSON.parse(raw) as
+      | RocketModel
+      | { model: RocketModel; configs?: FlightConfig[]; customMotors?: MotorSpec[] };
+    const m = 'model' in parsed ? parsed.model : parsed;
     model.value = m;
     selected.value = m.root.children[0] ?? m.root;
     history.value = [deepClone(m)];
     historyIndex.value = 0;
     fileName.value = '';
     restoreInfo.value = null;
+    if ('model' in parsed) {
+      if (parsed.configs && parsed.configs.length > 0) {
+        configs.value = parsed.configs;
+        currentConfigId.value = parsed.configs[0].id;
+      }
+      if (parsed.customMotors) customMotors.value = parsed.customMotors;
+    }
+    ensureMounts(activeConfig());
     void runAnalyze();
     scheduleAutoSave();
   } catch (e) {
@@ -212,6 +219,10 @@ function discardAuto(): void {
     selected.value = m.root.children[0] ?? m.root;
     history.value = [deepClone(m)];
     historyIndex.value = 0;
+    configs.value = [{ id: 'cfg-default', name: '默认配置', mounts: [] }];
+    currentConfigId.value = 'cfg-default';
+    customMotors.value = [];
+    applyMotorMeta(m);
     void runAnalyze();
   }
   // watch 回调为异步（flush pre），需等其跑完再恢复自动保存
@@ -409,20 +420,6 @@ function moveToComponent(drag: RocketComponent, target: RocketComponent, pos: 'b
   commitHistory();
 }
 
-/** 模型发动机：第一个带 motorId 的发动机架管（innertube）优先 */
-function findModelMotor(model: RocketModel): MotorSpec | null {
-  const stack: RocketComponent[] = [model.root];
-  while (stack.length) {
-    const n = stack.pop()!;
-    if (n.type === 'innertube' && n.properties?.['motorId']) {
-      const m = motorById(n.properties['motorId']);
-      if (m) return m;
-    }
-    stack.push(...(n.children ?? []));
-  }
-  return null;
-}
-
 function removeSelected(): void {
   const c = selected.value;
   if (!c || !model.value) return;
@@ -495,23 +492,110 @@ function addStage(): void {
 // —— 仿真 ——
 const simProfile = ref<FlightProfile | null>(null);
 const simLoading = ref(false);
-const selectedMotor = ref<MotorSpec>(motorById(DEFAULT_MOTOR_ID));
 const customMotors = ref<MotorSpec[]>([]);
-// —— P1-4 飞行配置：命名配置 = 发动机选择；切换配置即切换仿真发动机 ——
-interface FlightConfig { id: string; name: string; motorId: string; }
-const configs = ref<FlightConfig[]>([{ id: 'cfg-default', name: '默认配置', motorId: DEFAULT_MOTOR_ID }]);
+// —— 飞行配置：命名配置 = 每个电机座独立选电机 + 点火时序（对齐 OpenRocket Motors & Configurations）——
+interface MountConfig { path: string; motorId: string | null; ignitionDelay: number; }
+interface FlightConfig { id: string; name: string; mounts: MountConfig[]; }
+const configs = ref<FlightConfig[]>([{ id: 'cfg-default', name: '默认配置', mounts: [] }]);
 const currentConfigId = ref('cfg-default');
+
+/** 补齐配置的电机座条目（模型结构变化后自动对齐：新座补空、失效座保留不删） */
+function ensureMounts(cfg: FlightConfig): void {
+  if (!model.value) return;
+  const paths = mountCandidates(model.value.root).map((m) => mountPathOf(m));
+  const map = new Map(cfg.mounts.map((m) => [m.path, m]));
+  const next: MountConfig[] = [];
+  for (const p of paths) {
+    const ex = map.get(p);
+    next.push(ex ? { ...ex } : { path: p, motorId: null, ignitionDelay: 0 });
+  }
+  cfg.mounts = next;
+}
+function activeConfig(): FlightConfig {
+  const cfg = configs.value.find((c) => c.id === currentConfigId.value) ?? configs.value[0];
+  ensureMounts(cfg);
+  return cfg;
+}
+const allMotors = computed(() => [...MOTORS, ...customMotors.value]);
+function motorByIdSafe(id: string): MotorSpec | null {
+  return allMotors.value.find((m) => m.id === id) ?? null;
+}
+/** 面板数据结构：当前配置 × 当前模型电机座（含直径适配过滤） */
+interface MountItem {
+  path: string; comp: RocketComponent; name: string; compName: string; type: string;
+  outerDiaMM: number; motorId: string | null; motor: MotorSpec | null;
+  ignitionDelay: number; fitting: MotorSpec[];
+}
+const mountItems = computed<MountItem[]>(() => {
+  if (!model.value) return [];
+  const cfg = activeConfig();
+  return mountCandidates(model.value.root).map((comp) => {
+    const path = mountPathOf(comp);
+    const mc = cfg.mounts.find((m) => m.path === path);
+    const motorId = mc?.motorId ?? null;
+    const motor = motorId ? motorByIdSafe(motorId) : null;
+    const outerDia = Math.max(comp.radius, comp.aftRadius || comp.radius) * 2 * 1000;
+    return {
+      path, comp, name: comp.name, compName: comp.name, type: comp.type,
+      outerDiaMM: outerDia,
+      motorId, motor,
+      ignitionDelay: mc?.ignitionDelay ?? 0,
+      // 直径适配：电机外径 ≤ 电机座外径 ×0.92（壁厚余量近似）
+      fitting: allMotors.value.filter((m) => m.diameterMM <= outerDia * 0.92 + 0.001),
+    };
+  });
+});
+function setMountMotor(path: string, motorId: string | null): void {
+  const cfg = activeConfig();
+  const mc = cfg.mounts.find((m) => m.path === path);
+  if (mc) { mc.motorId = motorId; scheduleAutoSave(); scheduleAnalyze(); }
+}
+function setIgnDelay(path: string, d: number): void {
+  const cfg = activeConfig();
+  const mc = cfg.mounts.find((m) => m.path === path);
+  if (mc && Number.isFinite(d) && d >= 0) { mc.ignitionDelay = Math.round(d * 100) / 100; scheduleAutoSave(); }
+}
+/** P1-4：属性面板选电机 → 同步到对应电机座的飞行配置（同一数据通路） */
+function onPanelMotorChange(id: string): void {
+  if (!model.value || !selected.value) return;
+  const path = mountPathOf(selected.value);
+  if (!path) return; // 非电机座组件（如普通 innertube 无 motormount 标记），仅保留属性
+  setMountMotor(path, id || null);
+}
+/** 主电机（当前配置第一个非空电机座）——仿真面板 / 顶部默认展示用 */
+const primaryMotor = computed<MotorSpec>(() => {
+  const cfg = activeConfig();
+  for (const mc of cfg.mounts) {
+    if (mc.motorId) { const m = motorByIdSafe(mc.motorId); if (m) return m; }
+  }
+  return motorById(DEFAULT_MOTOR_ID);
+});
+/** 仿真电机序列：每座电机 + 点火时序（跳过未装电机座）；空则回退默认电机 */
+function mountedMotors(): { motor: MotorSpec; ignitionDelay: number }[] {
+  const cfg = activeConfig();
+  const out: { motor: MotorSpec; ignitionDelay: number }[] = [];
+  for (const mc of cfg.mounts) {
+    if (mc.motorId) { const m = motorByIdSafe(mc.motorId); if (m) out.push({ motor: m, ignitionDelay: mc.ignitionDelay }); }
+  }
+  if (out.length === 0) out.push({ motor: motorById(DEFAULT_MOTOR_ID), ignitionDelay: 0 });
+  return out;
+}
 function switchConfig(id: string) {
   const cfg = configs.value.find((c) => c.id === id);
   if (!cfg) return;
   currentConfigId.value = cfg.id;
-  selectedMotor.value = motorById(cfg.motorId);
+  ensureMounts(cfg);
+  simProfile.value = null;
+  scheduleAutoSave();
+  scheduleAnalyze();
 }
 function newConfig() {
   const n = configs.value.length + 1;
   const id = 'cfg-' + Date.now().toString(36);
-  configs.value.push({ id, name: `配置 ${n}`, motorId: selectedMotor.value.id });
+  const src = activeConfig();
+  configs.value.push({ id, name: `配置 ${n}`, mounts: src.mounts.map((m) => ({ ...m })) });
   currentConfigId.value = id;
+  scheduleAutoSave();
 }
 function deleteConfig() {
   if (configs.value.length <= 1) return;
@@ -519,7 +603,21 @@ function deleteConfig() {
   configs.value = configs.value.filter((c) => c.id !== currentConfigId.value);
   const next = configs.value[Math.max(0, idx - 1)];
   currentConfigId.value = next.id;
-  selectedMotor.value = motorById(next.motorId);
+  ensureMounts(next);
+  scheduleAutoSave();
+  scheduleAnalyze();
+}
+function renameConfig(id: string, name: string): void {
+  const c = configs.value.find((x) => x.id === id);
+  if (c) { c.name = name; scheduleAutoSave(); }
+}
+function copyConfig(): void {
+  const cur = activeConfig();
+  const n = configs.value.length + 1;
+  const id = 'cfg-' + Date.now().toString(36);
+  configs.value.push({ id, name: `配置 ${n}`, mounts: cur.mounts.map((m) => ({ ...m })) });
+  currentConfigId.value = id;
+  scheduleAutoSave();
 }
 // —— P1-5 仿真条件（风/温度/气压）——
 const simConditions = ref<SimConditions>({ ...DEFAULT_CONDITIONS });
@@ -531,7 +629,7 @@ watch(
   () => simProfile.value,
   (p) => {
     if (!p || p.error) return;
-    const row: CompareRow = { motorId: selectedMotor.value.id, motorName: selectedMotor.value.name, profile: p };
+    const row: CompareRow = { motorId: primaryMotor.value.id, motorName: primaryMotor.value.name, profile: p };
     const i = compareRows.value.findIndex((r) => r.motorId === row.motorId);
     if (i >= 0) compareRows.value.splice(i, 1, row);
     else { compareRows.value.push(row); if (compareRows.value.length > 12) compareRows.value.shift(); }
@@ -543,8 +641,8 @@ async function runCompareAll(): Promise<void> {
   try {
     const eng = getEngineBridge();
     if (eng.kind === 'none') return;
-    const all = [...MOTORS, ...customMotors.value];
-    const rows = await Promise.all(all.map(async (m) => ({ m, p: await eng.simulate(model.value as RocketModel, m, simConditions.value) })));
+    const all = allMotors.value;
+    const rows = await Promise.all(all.map(async (m) => ({ m, p: await eng.simulate(model.value as RocketModel, [{ motor: m, ignitionDelay: 0 }], simConditions.value) })));
     compareRows.value = rows
       .filter((r): r is { m: MotorSpec; p: FlightProfile } => !!r.p && !r.p.error)
       .map((r) => ({ motorId: r.m.id, motorName: r.m.name, profile: r.p }));
@@ -553,8 +651,9 @@ async function runCompareAll(): Promise<void> {
   }
 }
 function selectCompareRow(row: CompareRow): void {
-  const m = [...MOTORS, ...customMotors.value].find((x) => x.id === row.motorId);
-  if (m) selectedMotor.value = m;
+  const cfg = activeConfig();
+  const first = cfg.mounts.find((mc) => mc.motorId);
+  if (first) { first.motorId = row.motorId; first.ignitionDelay = 0; }
   simProfile.value = row.profile;
 }
 // —— P1-6 延迟优化 ——
@@ -570,14 +669,13 @@ async function runSimulate(): Promise<void> {
       simProfile.value = null;
       return;
     }
-    const mountMotor = findModelMotor(model.value);
-    simProfile.value = await eng.simulate(model.value, mountMotor ?? selectedMotor.value, simConditions.value);
+    simProfile.value = await eng.simulate(model.value, mountedMotors(), simConditions.value);
   } finally {
     simLoading.value = false;
   }
 }
 
-// —— P1-6 延迟优化（异步分片，不阻塞 UI）——
+// —— P1-6 延迟优化（异步分片，不阻塞 UI；基于主电机）——
 async function runOptimizeDelay() {
   if (!model.value) return;
   delayScanLoading.value = true;
@@ -585,7 +683,7 @@ async function runOptimizeDelay() {
   try {
     const eng = getEngineBridge();
     if (eng.kind === 'none') return;
-    delayScan.value = await eng.optimizeDelay(model.value, selectedMotor.value, simConditions.value);
+    delayScan.value = await eng.optimizeDelay(model.value, primaryMotor.value, simConditions.value);
   } finally {
     delayScanLoading.value = false;
   }
@@ -596,7 +694,8 @@ function onMotorImport(text: string) {
   const m = parseEngFile(text);
   if (!m) return;
   customMotors.value = [...customMotors.value.filter((x) => x.id !== m.id), m];
-  selectedMotor.value = m;
+  const first = activeConfig().mounts.find((mc) => mc.motorId === null);
+  if (first) { first.motorId = m.id; scheduleAutoSave(); }
 }
 
 // —— 打开文件 ——
@@ -616,6 +715,7 @@ async function openFile(file: File): Promise<void> {
     history.value = [deepClone(m)];
     historyIndex.value = 0;
     simProfile.value = null;
+    applyMotorMeta(m);
     await runAnalyze();
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
@@ -751,12 +851,20 @@ function loadPresetByName(name: string): void {
   simProfile.value = null;
   analysis.value = null;
   error.value = '';
+  configs.value = [{ id: 'cfg-default', name: '默认配置', mounts: [] }];
+  currentConfigId.value = 'cfg-default';
+  customMotors.value = [];
+  applyMotorMeta(m);
   void runAnalyze();
 }
 
 async function saveOrk(): Promise<void> {
   if (!model.value) return;
-  const blob = await modelToOrkBlob(model.value);
+  // P0-2：飞行配置与自定义电机随 .ork 一起导出（Web 扩展注释，官方可忽略）
+  const blob = await modelToOrkBlob(model.value, {
+    configs: configs.value.map((c) => ({ id: c.id, name: c.name, mounts: c.mounts.map((m) => ({ ...m })) })),
+    customMotors: customMotors.value,
+  });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `${(model.value.name || 'rocket').replace(/[\\/:*?"<>|]/g, '_')}.ork`;
@@ -764,6 +872,31 @@ async function saveOrk(): Promise<void> {
   a.click();
   a.remove();
   URL.revokeObjectURL(a.href);
+}
+
+/** 加载后恢复飞行配置：优先 .ork 内嵌 meta；否则把组件属性上的 motorId 同步进默认配置（官方/旧文件兼容） */
+function applyMotorMeta(m: RocketModel & { webMeta?: OrkWebMeta | null }): void {
+  const meta = m.webMeta;
+  if (meta && meta.configs && meta.configs.length > 0) {
+    configs.value = meta.configs.map((c) => ({ id: c.id, name: c.name, mounts: c.mounts.map((x) => ({ ...x })) }));
+    currentConfigId.value = meta.configs[0].id;
+    if (meta.customMotors) customMotors.value = meta.customMotors;
+  } else {
+    // 旧文件：组件 [meta] motorId → 首个空电机座（官方 OpenRocket 语义：电机座上的电机）
+    configs.value = [{ id: 'cfg-default', name: '默认配置', mounts: [] }];
+    currentConfigId.value = 'cfg-default';
+    const firstMount = mountCandidates(m.root)[0];
+    if (firstMount) {
+      const mid = firstMount.properties?.['motorId'];
+      if (mid) {
+        const cfg = configs.value[0];
+        ensureMounts(cfg);
+        const mc = cfg.mounts.find((x) => x.path === mountPathOf(firstMount));
+        if (mc) mc.motorId = mid;
+      }
+    }
+  }
+  ensureMounts(activeConfig());
 }
 
 async function loadOfficialExample(file: string): Promise<void> {
@@ -781,6 +914,7 @@ async function loadOfficialExample(file: string): Promise<void> {
     history.value = [deepClone(m)];
     historyIndex.value = 0;
     simProfile.value = null;
+    applyMotorMeta(m);
     await runAnalyze();
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
@@ -1098,15 +1232,15 @@ function stabNote(): string {
         <MotorConfigPanel
           :configs="configs"
           :current-config-id="currentConfigId"
-          :motors="[...MOTORS, ...customMotors]"
-          :motor-id="selectedMotor.id"
-          :mounts="motorMounts()"
+          :motors="allMotors"
+          :mounts="mountItems"
           @switch-config="switchConfig"
           @new-config="newConfig"
           @delete-config="deleteConfig"
           @rename-config="renameConfig"
           @copy-config="copyConfig"
-          @motor-change="(m: MotorSpec) => (selectedMotor = m)"
+          @set-mount-motor="setMountMotor"
+          @set-ign-delay="setIgnDelay"
           @motor-import="onMotorImport"
         />
       </template>
@@ -1117,14 +1251,13 @@ function stabNote(): string {
           <SimulationPanel
             :profile="simProfile"
             :loading="simLoading"
-            :motors="[...MOTORS, ...customMotors]"
-            :motor-id="selectedMotor.id"
+            :motors="allMotors"
+            :motor-id="primaryMotor.id"
             :conditions="simConditions"
             :delay-scan="delayScan"
             :delay-loading="delayScanLoading"
             :compare-rows="compareRows"
             :compare-loading="compareLoading"
-            @motor-change="(m: MotorSpec) => (selectedMotor = m)"
             @motor-import="onMotorImport"
             @conditions-change="(c: SimConditions) => (simConditions = c)"
             @optimize-delay="runOptimizeDelay"
@@ -1190,7 +1323,15 @@ function stabNote(): string {
             <span>{{ t('prop.title') }}</span>
             <span v-if="selected" class="prop-type">{{ typeLabelOf(selected) }}</span>
           </div>
-          <PropertyPanel :component="selected" :hovered="hoveredComp" :unit-mode="unitMode" @changed="onPropChanged" @remove="removeSelected" />
+          <PropertyPanel
+            :component="selected"
+            :hovered="hoveredComp"
+            :unit-mode="unitMode"
+            :motors="allMotors"
+            @changed="onPropChanged"
+            @remove="removeSelected"
+            @motor-id-change="(id: string) => onPanelMotorChange(id)"
+          />
         </aside>
       </div>
 

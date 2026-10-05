@@ -400,9 +400,10 @@ export class JsEngine implements EngineBridge {
     }
   }
 
-  async simulate(model: RocketModel, motor?: MotorSpec, cond?: SimConditions): Promise<FlightProfile | null> {
+  async simulate(model: RocketModel, motors?: MountedMotor[], cond?: SimConditions): Promise<FlightProfile | null> {
     try {
-      return simulate2dof(model, motor ?? motorById('c6-5'), cond ?? DEFAULT_CONDITIONS);
+      const mm = motors && motors.length > 0 ? motors : [{ motor: motorById('c6-5'), ignitionDelay: 0 }];
+      return simulate2dof(model, mm, cond ?? DEFAULT_CONDITIONS);
     } catch (e) {
       console.error('JS 仿真失败：', e);
       return {
@@ -416,17 +417,17 @@ export class JsEngine implements EngineBridge {
   }
 
   /** 延迟优化扫描（P1-6）：对候选延迟跑全仿真，验证最优延迟=远地点−燃尽；
-   *  异步分片（每 2 次仿真让出事件循环），避免阻塞 UI */
+   *  异步分片（每 2 次仿真让出事件循环），避免阻塞 UI；基于主电机（第一台） */
   async optimizeDelay(model: RocketModel, motor: MotorSpec, cond?: SimConditions): Promise<DelayScanResult> {
     const m0 = motor ?? motorById('c6-5');
     const cond0 = cond ?? DEFAULT_CONDITIONS;
-    const base = await simulate2dof(model, m0, cond0);
+    const base = await simulate2dof(model, [{ motor: m0, ignitionDelay: 0 }], cond0);
     const apogee = base.timeToApogee_s;
     const burn = m0.curve.time[m0.curve.time.length - 1];
     const maxDelay = Math.max(12, Math.ceil(apogee + 4));
     const rows: DelayScanRow[] = [];
     for (let d = 0; d <= maxDelay; d++) {
-      const p = await simulate2dof(model, { ...m0, delay: d }, cond0);
+      const p = await simulate2dof(model, [{ motor: { ...m0, delay: d }, ignitionDelay: 0 }], cond0);
       rows.push({
         delay_s: d,
         maxAltitude_m: p.maxAltitude_m,
@@ -445,6 +446,11 @@ export class JsEngine implements EngineBridge {
 // 说明：简化模型 = 垂直 2DOF（推力/重力/阻力），不含侧风、倾斜与 3D 转动；
 // 发动机默认 C6-5（Estes 规格近似曲线，见 engines.ts）；本结果与官方桌面版 6DOF 存在口径差异
 // （质量口径、气动模型、发动机曲线），不作为精确飞行预测。
+// 多电机：每电机座一台，按各自 ignitionDelay 点火（0=与主级同时，>0=级间/助推延迟点火）；
+// 同时点火的电机推力叠加，推进剂各自消耗。主级 = 第一个电机（其点火时序为仿真 0 时刻）。
+
+/** 已装配电机：motor + 相对主级点火的延迟（秒） */
+export interface MountedMotor { motor: MotorSpec; ignitionDelay: number; }
 
 const G = 9.80665;
 export const DEFAULT_CONDITIONS: SimConditions = { windSpeed_ms: 0, temperature_C: 15, pressure_hPa: 1013.25 };
@@ -531,7 +537,8 @@ function chuteCdAOf(model: RocketModel): number {
 }
 
 // 3DOF 仿真：纵向（高度/速度）+ 偏航平面（横风侧向漂移，Heun 积分），多级分离/开伞/发射杆约束
-function simulate2dof(model: RocketModel, motor: MotorSpec, cond: SimConditions): FlightProfile {
+// motors：已装配电机序列（含点火时序），至少 1 台；主级 = motors[0]
+function simulate2dof(model: RocketModel, motors: MountedMotor[], cond: SimConditions): FlightProfile {
   const a0 = analyzeModel(model);
   if (!(a0.mass > 0)) {
     return {
@@ -559,24 +566,37 @@ function simulate2dof(model: RocketModel, motor: MotorSpec, cond: SimConditions)
     }
   }
 
-  // 发动机参数：燃尽时刻、总冲（曲线积分）、开伞时刻 = max(远地点, 燃尽+延迟)
-  const burn = motor.curve.time[motor.curve.time.length - 1];
-  let impulse = 0;
-  for (let i = 1; i < motor.curve.time.length; i++) {
-    impulse += 0.5 * (motor.curve.thrust[i - 1] + motor.curve.thrust[i]) * (motor.curve.time[i] - motor.curve.time[i - 1]);
-  }
-  const ejectT = burn + motor.delay;
+  // 电机参数：主级燃尽、各电机总冲（曲线积分）、开伞时刻 = max(远地点, 主级燃尽+主级延迟)
+  const main = motors[0];
+  const burnMain = main.motor.curve.time[main.motor.curve.time.length - 1];
+  const impulses = motors.map((mm) => {
+    let s = 0;
+    for (let i = 1; i < mm.motor.curve.time.length; i++) {
+      s += 0.5 * (mm.motor.curve.thrust[i - 1] + mm.motor.curve.thrust[i]) * (mm.motor.curve.time[i] - mm.motor.curve.time[i - 1]);
+    }
+    return Math.max(s, 1e-9);
+  });
+  const ejectT = burnMain + main.motor.delay;
+  /** 所有电机在 t 时刻的合成推力（各自偏移点火时序后叠加） */
+  const thrustAtAll = (t: number): number => {
+    let T = 0;
+    for (let i = 0; i < motors.length; i++) T += thrustAt(t - motors[i].ignitionDelay, motors[i].motor);
+    return T;
+  };
+  // 各电机剩余推进剂质量（从 mass0 消耗到 mass1）
+  const remMasses = motors.map((mm) => mm.motor.mass0);
+  const totalMass = () => mStruct + remMasses.reduce((a, b) => a + b, 0) + (separated ? 0 : sepMass);
 
   let t = 0, z = 0, v = 0;
   let y = 0, vy = 0; // 3DOF：侧向位移/速度（横风驱动偏航平面，发射杆约束时锁定）
-  let m = mStruct + motor.mass0 + sepMass;
+  let m = totalMass();
   let onRod = true;
   let deployed = false;
   let apogee = 0, apogeeT = 0;
   let maxV = 0, maxA = 0, maxMach = 0, rodV = 0, groundV = 0;
   const times: number[] = [], alts: number[] = [], vels: number[] = [], accs: number[] = [], machs: number[] = [];
   const pushSample = () => {
-    const a = (thrustAt(t, motor) - G * m) / m; // 净加速度（不含阻力，供展示）
+    const a = (thrustAtAll(t) - G * m) / m; // 净加速度（不含阻力，供展示）
     times.push(t); alts.push(z); vels.push(v); accs.push(a);
     machs.push(Math.abs(v) / speedOfSound(Math.max(z, 0), cond));
   };
@@ -585,7 +605,7 @@ function simulate2dof(model: RocketModel, motor: MotorSpec, cond: SimConditions)
   const dt = 0.005;
   let lastSample = 0;
   while (t < 240 && z >= -0.001) {
-    const T = thrustAt(t, motor);
+    const T = thrustAtAll(t);
     const rho = airDensity(Math.max(z, 0), cond);
     const dragCoef = deployed ? PARACHUTE_FACTOR : 1;
     // 开伞后：阻力取 基础CdA×30 与 伞CdA 的较大者（伞展开后阻力主导下降段；未设伞参数时保持旧逻辑）
@@ -596,7 +616,7 @@ function simulate2dof(model: RocketModel, motor: MotorSpec, cond: SimConditions)
     // Heun（改进欧拉）
     const v1 = v + a * dt;
     const z1 = Math.max(z + v1 * dt, -0.002);
-    const T1 = thrustAt(t + dt, motor);
+    const T1 = thrustAtAll(t + dt);
     const rho1 = airDensity(Math.max(z1, 0), cond);
     const D1 = 0.5 * rho1 * v1 * v1 * cdaEff * dragCoef * (v1 > 0 ? 1 : -1);
     const a1 = (T1 - G * m - D1) / m;
@@ -623,12 +643,16 @@ function simulate2dof(model: RocketModel, motor: MotorSpec, cond: SimConditions)
         rodV = v2;
       }
     }
-    // 推进剂消耗：按推力比例分摊
-    if (T > 0) {
-      m = Math.max(mStruct + motor.mass1 + (separated ? 0 : sepMass), m - (motor.propellant * T * dt) / Math.max(impulse, 1e-9));
+    // 推进剂消耗：各电机按自身推力比例分摊
+    for (let i = 0; i < motors.length; i++) {
+      const th = thrustAt(t - motors[i].ignitionDelay, motors[i].motor);
+      if (th > 0) {
+        remMasses[i] = Math.max(motors[i].motor.mass1, remMasses[i] - (motors[i].motor.propellant * th * dt) / impulses[i]);
+      }
     }
-    // 多级分离：上级燃尽瞬间抛掉下级
-    if (!separated && sepMass > 0 && t >= burn) {
+    m = totalMass();
+    // 多级分离：主级燃尽瞬间抛掉下级
+    if (!separated && sepMass > 0 && t >= burnMain) {
       m -= sepMass;
       separated = true;
     }
@@ -637,7 +661,7 @@ function simulate2dof(model: RocketModel, motor: MotorSpec, cond: SimConditions)
       apogee = Math.max(z, z2);
       apogeeT = t + dt;
     }
-    // 开伞：默认 max(远地点, 燃尽+延迟)；若指定伞部署高度 deployAlt>0，则下降至该高度再开伞
+    // 开伞：默认 max(远地点, 主级燃尽+主级延迟)；若指定伞部署高度 deployAlt>0，则下降至该高度再开伞
     if (!deployed && apogeeT > 0 && t >= ejectT) {
       const deployAlt = findDeployAlt(model);
       const atDeploy = deployAlt > 0 ? z <= deployAlt : t >= apogeeT;
@@ -665,7 +689,7 @@ function simulate2dof(model: RocketModel, motor: MotorSpec, cond: SimConditions)
     flightTime_s: t,
     groundHitVelocity_ms: groundV,
     launchRodVelocity_ms: rodV,
-    optimumDelay_s: Math.max(0, apogeeT - burn), // 使远地点开伞的最优延迟
+    optimumDelay_s: Math.max(0, apogeeT - burnMain), // 使远地点开伞的最优延迟
     windDrift_m: y, // 3DOF 侧向位移：横风气动阻力积分的真实漂移
     hasErrors: false,
     error: undefined,

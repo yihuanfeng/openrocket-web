@@ -91,8 +91,8 @@ export class WasmEngine implements EngineBridge {
       };
     }
   }
-  /** 对当前设计跑 6DOF 仿真（阶段 3）：designSimulate → 摘要 + 飞行剖面 */
-  async simulate(model: RocketModel, _motor?: import('./engines').MotorSpec, _cond?: import('./types').SimConditions): Promise<FlightProfile | null> {
+  /** 对当前设计跑仿真（阶段 3）：designSimulate → 摘要 + 飞行剖面；WASM 为单电机内置实现，忽略多电机参数 */
+  async simulate(model: RocketModel, _motors?: import('./jsEngine').MountedMotor[], _cond?: import('./types').SimConditions): Promise<FlightProfile | null> {
     try {
       const teavm = await ensureWasm();
       const ex = teavm.instance.exports;

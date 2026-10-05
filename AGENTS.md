@@ -44,11 +44,14 @@
 - `geometry.ts` — **核心几何引擎** `layoutRocket(root)`：把组件树展开为 `GeoSeg[]`（每段含 z0/z1/r0/r1/depth）。轴向语义对齐官方（见 §5），半径继承：同 stage 无显式半径直系组件继承前一身体组件半径。**并联级**：boosters/pods 为并行容器（不产生自身段），其子级自鼻端布局并带 `xOff` 侧向偏移（主级最大半径 + 2mm 间隙，多个并联体依次右排）。
 - `componentFactory.ts` — `makeComponent(type, params)`：按类型构造组件；`ComponentParams` 支持 `axialOffset` / `axialMethod`（'after' 等）。已覆盖全部官方组件类型（含 stage/boosters/pods/railbutton/tubefinset）。
 - `presets.ts` — 6 个内置示例；`makeFin()` 辅助函数 = 尾翼根部覆盖管尾（AFTER + 负偏移，等效官方 BOTTOM）。
-- `engines.ts` — 26 款内置发动机（Estes 全系，规格来自 Estes Engine Chart + ThrustCurve 认证值）；`parseEngFile()` 支持用户导入 .eng。
+- `engines.ts` — 27 款内置发动机（Estes 全系 + C5-3，规格来自 Estes Engine Chart + ThrustCurve 认证值）；`parseEngFile()` 支持用户导入 .eng。
+- **飞行配置模型（2026-10-05 重构）**：`FlightConfig { id, name, mounts[] }`，`MountConfig { path, motorId|null, ignitionDelay }`。电机座用**组件路径**定位（root→子索引链如 '1.0.3'，`mountCandidates()` 遍历时挂 `__mPath`）。每座独立配电机/移除/点火时序（对齐官方 Motors & Configurations）。`activeConfig()` 会 `ensureMounts()` 按当前模型自动补齐新座条目。直径适配：`motor.diameterMM ≤ 座外径×0.92` 过滤下拉（`mountItems` computed）。属性面板 innertube 电机下拉与配置面板**同一数据通路**（emit `motorIdChange` → `onPanelMotorChange` → `setMountMotor`）。
+- `jsEngine.ts` — **多电机时序仿真**：`simulate(model, MountedMotor[], cond)`，`MountedMotor { motor, ignitionDelay }`；同时点火推力叠加、推进剂各自消耗，主级 = 第一台；WASM 引擎仍为单电机忽略多机参数。
+- **持久化（2026-10-05）**：autosave `ork:autosave:v1` 存 `{ model, configs, customMotors }`（兼容旧裸 model 存档）；.ork 导出经 `modelToOrkBlob(model, meta)` 写入 XML 注释 `<!--ork-web:...-->`（`--` 转义为 `\u002d`），`parseOrkWebMeta()`/`orkParser` 读回挂 `model.webMeta`，`applyMotorMeta()` 恢复配置或回退同步组件属性 motorId。
 - `orkParser.ts` — 解析官方 .ork（ZIP，内部 JSZip 解压，node 环境需注入 `@xmldom/xmldom` 的 DOMParser）。
 - `jsEngine.ts` / `wasmEngine.ts` — 仿真引擎（JS 为主；wasm 为备选，浏览器不支持 WebAssembly GC 时自动降级）。
 - `designSerializer.ts` — RocketModel → 官方 design 动作序列。
-- `orkSerializer.ts` / `rktParser.ts` — .ork 序列化 / Rocksim .rkt 解析。
+- `orkSerializer.ts` / `rktParser.ts` — .ork 序列化（含 Web 扩展 meta）/ Rocksim .rkt 解析。
 - `materials.ts` — 材料数据（密度等）。
 - `thumbPath.ts` — 缩略图几何（与 geometry.ts 共用 layoutRocket）。
 
@@ -104,7 +107,8 @@ npm run gen:thumbs # 重生成示例缩略图（改 presets/geometry 后必须�
 - 尾翼轴向：makeFin 全覆盖管尾（6 内置示例全部对齐）
 - 尾翼外形：2D/3D 按梯形（多边形）/椭圆（Q 曲线）/自由（点序列剪式）/管翼（矩形）四种外形渲染
 - 组件全覆盖：boosters/pods 并联级布局（GeoSeg.xOff）、railbutton、tubefinset 全部可创建，组件库无"即将支持"
-- 发动机库 8 → 26 款（A3/A8/B4/B6/C6/C11/D12/E9/E12/F15 各延迟变体），D12 直径修正为 24mm
+- 发动机库 8 → 27 款（A3/A8/B4/B6/C6/C11/C5/D12/E9/E12/F15 各延迟变体），D12 直径修正为 24mm
+- **发动机配置重构（2026-10-05，P0–P2 全量）**：逐电机座独立选电机/移除/点火时序（`configs[].mounts[]`，路径定位）；直径适配过滤（`mountItems.fitting`）；配置+自定义电机随 autosave 与 .ork 持久化（`modelToOrkBlob(model, meta)` XML 注释）；属性面板电机下拉与配置面板统一通路（`motorIdChange` 事件）；jsEngine 多电机时序点火仿真（同时点火叠加/级间延迟）；电机库 26→27 款（新增 C5-3，Estes 官方 + ThrustCurve 双源）
 - 伞/飘带回归机身管内前段（bodytube 子组件 + offset）
 - 3D 部件程序化材质纹理（碳纤维/拉丝/玻纤/布料）
 - CG/CP 标记 tooltip（2D SVG + 3D Canvas 命中检测）
@@ -118,3 +122,6 @@ npm run gen:thumbs # 重生成示例缩略图（改 presets/geometry 后必须�
 3. 工程级/高发比示例的内部件树结构梳理（内部件应挂 bodytube 下而非 stage 直系，当前导致尾部组件略偏后）
 4. 设置面板「外观」tab
 5. 官方材质库（材料数据）借用
+6. **ThrustCurve 实测曲线库**：当前内置 27 款为规格梯形近似；官方为 ThrustCurve.org 数千条实测 + 用户目录批量导入（.eng/.rse）。已有单文件 .eng 导入；目录批量导入与实测库接入是 P2-6 剩余部分
+7. **级间点火时序精度**：jsEngine 已支持 ignitionDelay 时序，但分离逻辑仍以"主级燃尽"为界（官方为每级独立事件），多级电机配置的级间时序精确模拟待完善
+8. **WASM 引擎多电机**：WasmEngine.simulate 仍为单电机（忽略 MountedMotor 参数），多电机时序仅在 JS 引擎生效

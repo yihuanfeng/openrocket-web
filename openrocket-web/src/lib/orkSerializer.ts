@@ -269,8 +269,14 @@ function compToXml(c: RocketComponent, depth: number): string {
   return lines.join('\n');
 }
 
-/** RocketModel → OpenRocket XML 文本 */
-export function modelToOrkXml(model: RocketModel): string {
+/** 飞行配置与自定义电机（Web 扩展，存于 XML 注释，官方 OpenRocket 可忽略） */
+export interface OrkWebMeta {
+  configs?: { id: string; name: string; mounts: { path: string; motorId: string | null; ignitionDelay: number }[] }[];
+  customMotors?: import('./engines').MotorSpec[];
+}
+
+/** RocketModel → OpenRocket XML 文本（meta 序列化为 XML 注释，避免官方解析器报错） */
+export function modelToOrkXml(model: RocketModel, meta?: OrkWebMeta): string {
   const out: string[] = [XML_DECL];
   out.push(`<openrocket version="1.3" creator="OpenRocket Web">`);
   out.push(`  <rocket>`);
@@ -286,14 +292,30 @@ export function modelToOrkXml(model: RocketModel): string {
   }
   out.push(`    </subcomponents>`);
   out.push(`  </rocket>`);
+  if (meta && (meta.configs?.length || meta.customMotors?.length)) {
+    // 注释内禁止出现连字符对 `--`：JSON 字符串中转义为 \u002d（JSON.parse 自动还原）
+    const json = JSON.stringify(meta).replace(/--/g, '\\u002d\\u002d');
+    out.push(`<!--ork-web:${json}-->`);
+  }
   out.push(`</openrocket>`);
   return out.join('\n');
 }
 
 /** RocketModel → .ork 文件字节（ZIP 压缩包，内含 rocket.ork） */
-export async function modelToOrkBlob(model: RocketModel): Promise<Blob> {
-  const xml = modelToOrkXml(model);
+export async function modelToOrkBlob(model: RocketModel, meta?: OrkWebMeta): Promise<Blob> {
+  const xml = modelToOrkXml(model, meta);
   const zip = new JSZip();
   zip.file('rocket.ork', xml);
   return await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+}
+
+/** 从 OpenRocket XML 文本提取 Web 扩展 meta（无则返回 null） */
+export function parseOrkWebMeta(xml: string): OrkWebMeta | null {
+  const m = xml.match(/<!--ork-web:(.*?)-->/);
+  if (!m) return null;
+  try {
+    return JSON.parse(m[1]) as OrkWebMeta;
+  } catch {
+    return null;
+  }
 }

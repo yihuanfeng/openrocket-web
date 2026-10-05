@@ -1,6 +1,7 @@
 // .ork 文件解析：ZIP/gzip/纯 XML 识别 → XML 解析 → 组件树模型
 import JSZip from 'jszip';
 import type { RocketComponent, RocketModel } from './types';
+import { parseOrkWebMeta } from './orkSerializer';
 
 /** 从 XML 文本节点中取数值，兼容 "auto 0.033528"、"0.254" 等格式 */
 function parseNum(raw: string | null | undefined): number {
@@ -149,7 +150,7 @@ async function decompressToXml(buffer: ArrayBuffer): Promise<string> {
   return new TextDecoder('utf-8').decode(bytes);
 }
 
-/** 解析 .ork 文件字节为火箭模型 */
+/** 解析 .ork 文件字节为火箭模型（含 Web 扩展 meta：飞行配置/自定义电机） */
 export async function parseOrk(buffer: ArrayBuffer): Promise<RocketModel> {
   const xml = await decompressToXml(buffer);
   const doc = new DOMParser().parseFromString(xml, 'text/xml');
@@ -181,6 +182,9 @@ export async function parseOrk(buffer: ArrayBuffer): Promise<RocketModel> {
     referenceType: textOf(rocketEl, 'referencetype') ?? '',
     root,
   };
+  // Web 扩展：飞行配置 / 自定义电机（序列化于 XML 注释）
+  const meta = parseOrkWebMeta(xml);
+  if (meta) (model as RocketModel & { webMeta?: unknown }).webMeta = meta;
   return model;
 }
 

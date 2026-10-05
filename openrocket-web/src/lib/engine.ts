@@ -1,14 +1,15 @@
 // 引擎桥：统一接口——WASM 优先（需 WebAssembly GC）；不支持时降级为 JS 静态分析引擎
 import type { DelayScanResult, EngineAnalysis, FlightProfile, RocketModel, SimConditions } from './types';
 import type { MotorSpec } from './engines';
+import type { MountedMotor } from './jsEngine';
 import { WasmEngine } from './wasmEngine';
 import { JsEngine } from './jsEngine';
 
 export interface EngineBridge {
   /** 计算整箭质量、CG、CP、稳定性（输入为已解析的火箭模型） */
   analyze(model: RocketModel): Promise<EngineAnalysis>;
-  /** 对当前设计跑 6DOF 仿真，返回飞行剖面（阶段 3；JS 引擎暂不支持时返回 null） */
-  simulate(model: RocketModel, motor?: MotorSpec, cond?: SimConditions): Promise<FlightProfile | null>;
+  /** 对当前设计跑仿真，返回飞行剖面；motors = 已装配电机序列（含点火时序），缺省回退 C6-5 */
+  simulate(model: RocketModel, motors?: MountedMotor[], cond?: SimConditions): Promise<FlightProfile | null>;
   /** 延迟优化扫描（P1-6）：候选延迟全仿真，返回最优延迟与扫描表（WASM 引擎不支持时抛错） */
   optimizeDelay(model: RocketModel, motor?: MotorSpec, cond?: SimConditions): Promise<DelayScanResult>;
   readonly kind: 'wasm' | 'http' | 'js' | 'none';
