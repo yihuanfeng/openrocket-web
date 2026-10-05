@@ -148,8 +148,22 @@ function onNumChange(key: string, e: Event): void {
   const c = props.component;
   if (!c) return;
   const input = e.target as HTMLInputElement;
-  const v = parseFloat(input.value);
-  if (isNaN(v) || v < 0) {
+  const raw = input.value.trim();
+  if (raw === '') {
+    // 空输入 = 清除该属性：轴向偏移恢复「自动接续」（AFTER + 0 等效位置）
+    if (key === 'axialOffset') {
+      (c as unknown as { axialOffset?: number; axialMethod?: string }).axialOffset = NaN;
+      (c as unknown as { axialMethod?: string }).axialMethod = undefined;
+    } else {
+      setNum(c, key, NaN);
+    }
+    const next = new Set(invalidKeys.value); next.delete(key);
+    invalidKeys.value = next;
+    emit('changed');
+    return;
+  }
+  const v = parseFloat(raw);
+  if (isNaN(v) || (v < 0 && key !== 'axialOffset')) {
     invalidKeys.value = new Set(invalidKeys.value).add(key);
     input.title = t('prop.invalidNum');
     return; // 保留输入框内容，红框提示
@@ -158,6 +172,12 @@ function onNumChange(key: string, e: Event): void {
   invalidKeys.value = next;
   const store = isLenKey(key) ? v / (LEN_FACTOR[props.unitMode ?? 'mm'] ?? 1) : v;
   setNum(c, key, store);
+  if (key === 'axialOffset') {
+    // 轴向偏移 = 相对前一组件尾端的 AFTER 偏移；仅当组件无显式轴向方法时补语义，
+    // 官方 method（bottom/middle/top）组件保持原语义，offset 作为配合量
+    const cAny = c as unknown as { axialMethod?: string };
+    if (!cAny.axialMethod) cAny.axialMethod = 'after';
+  }
   emit('changed');
 }
 

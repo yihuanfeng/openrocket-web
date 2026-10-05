@@ -7,7 +7,7 @@ import { layoutRocket, type GeoSeg } from '../lib/geometry';
 
 const { t } = useI18n();
 const props = defineProps<{ root: RocketComponent; selected?: RocketComponent | null; cgX?: number | null; cpX?: number | null; orientation?: 'vertical' | 'horizontal' }>();
-const emit = defineEmits<{ hover: [c: RocketComponent | null]; pick: [c: RocketComponent] }>();
+const emit = defineEmits<{ hover: [c: RocketComponent | null]; pick: [c: RocketComponent | null] }>();
 const isH = computed(() => props.orientation === 'horizontal');
 
 type Seg = GeoSeg;
@@ -398,17 +398,18 @@ function draw(): void {
   ctx.beginPath(); ctx.arc(0, 0, shR, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 
-  // 变换 + 深度排序
+  // 变换 + 深度排序（轨道球：先绕竖直轴 yaw，再绕屏幕水平轴 pitch，任意方向自由旋转）
   for (const t of tris) {
     const pr = t.pts.map(([x, y, z]) => {
-      const cos = Math.cos(rotY), sin = Math.sin(rotY);
-      const x1 = x * cos - y * sin, y1 = x * sin + y * cos;
+      const cY = Math.cos(rotY), sY = Math.sin(rotY);
       const c2 = Math.cos(tilt), s2 = Math.sin(tilt);
-      const y2 = y1 * c2 - z * s2, z2 = y1 * s2 + z * c2;
+      const x1 = x * cY + z * sY, z1 = -x * sY + z * cY; // 绕竖直轴（yaw）：x-z 平面
+      const y2 = y * c2 - z1 * s2, z2 = y * s2 + z1 * c2; // 绕水平轴（pitch）：y-z 平面
       if (isH.value) {
-        // 横版：轴向 z → 屏幕 x（头朝左），半径 → 屏幕 y
-        return { x: cxp - maxZ * unit * 0.5 + z * unit, y: baseY + y1 * unit, depth: y2 };
+        // 横版：旋转后轴向（z2）→ 屏幕 x（头朝左），半径 → 屏幕 y；深度取 x1（屏幕法线残余）
+        return { x: cxp - maxZ * unit * 0.5 + z2 * unit, y: baseY + y2 * unit, depth: x1 };
       }
+      // 竖版：yaw 后 x1 → 屏幕 x，轴向（z2）→ 屏幕 y；深度取 y2（视线残余）
       return { x: cxp + x1 * unit, y: baseY + z2 * unit, depth: y2 };
     });
     t.depth = (pr[0].depth + pr[1].depth + pr[2].depth) / 3;
@@ -559,14 +560,14 @@ function draw(): void {
     c.fillText(t('view3d.axisZ'), cxp + 9, baseY + maxZ * unit + 14);
   }
 
-  // XYZ 轴指示器（左下角罗盘，随视角旋转）
+  // XYZ 轴指示器（左下角罗盘，随视角旋转；与主渲染同一轨道球矩阵）
   const ox = 52, oy = h - 62;
   const axisVec = (vx: number, vy: number, vz: number) => {
-    const cos = Math.cos(rotY), sin = Math.sin(rotY);
+    const cY = Math.cos(rotY), sY = Math.sin(rotY);
     const c2 = Math.cos(tilt), s2 = Math.sin(tilt);
-    const x1 = vx * cos - vy * sin;
-    const y1 = vx * sin + vy * cos;
-    const y2 = y1 * c2 - vz * s2;
+    const x1 = vx * cY + vz * sY;
+    const z1 = -vx * sY + vz * cY;
+    const y2 = vy * c2 - z1 * s2;
     return { ex: ox + x1 * 32, ey: oy - y2 * 32 };
   };
   const axisDraw = (vx: number, vy: number, vz: number, color: string, label: string) => {
@@ -638,14 +639,20 @@ function draw(): void {
   ctx.fillText(hoverName.value || (xrayT.value > 0.5 ? t('view3d.hintCut') : t('view3d.hintDrag')), w / 2, h - 8);
 }
 
+let dragDist = 0; // 拖动累计距离：区分「旋转拖动」与「点击选中」
+
 function onDown(e: MouseEvent): void {
   dragging = true;
   lastX = e.clientX; lastY = e.clientY;
+  dragDist = 0;
 }
 function onMove(e: MouseEvent): void {
   if (dragging) {
-    rotY += (e.clientX - lastX) * 0.009;
-    tilt = Math.min(Math.max(tilt + (e.clientY - lastY) * 0.004, 0.05), 1.35);
+    const dx = e.clientX - lastX, dy = e.clientY - lastY;
+    dragDist += Math.abs(dx) + Math.abs(dy);
+    // 轨道球：水平拖动绕竖直轴（转台方位），垂直拖动绕屏幕水平轴（俯仰）；自由环绕不钳制
+    rotY += dx * 0.009;
+    tilt += dy * 0.004;
     lastX = e.clientX; lastY = e.clientY;
     return;
   }
@@ -681,9 +688,11 @@ function pickAt(mx: number, my: number): RocketComponent | null {
 function onCanvasClick(e: MouseEvent): void {
   const cv = canvas.value;
   if (!cv) return;
+  if (dragDist > 6) return; // 刚做过旋转拖动，忽略本次 click（避免误选中）
   const rect = cv.getBoundingClientRect();
   const hit = pickAt(e.clientX - rect.left, e.clientY - rect.top);
-  if (hit) emit('pick', hit);
+  // 点击组件选中；点击空白处取消选中
+  emit('pick', hit);
 }
 
 function getObj(): string {
