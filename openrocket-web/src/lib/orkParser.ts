@@ -174,6 +174,9 @@ export async function parseOrk(buffer: ArrayBuffer): Promise<RocketModel> {
     shape: '',
   };
   parseChildren(rocketEl, root);
+  // 官方语义：管内件（内管/管接头/定心环等）通常无 <radius>，继承所在管半径。
+  // 解析后统一沿父链填充，避免 NaN 导致发动机座直径失效（含内管套内管场景）。
+  inheritRadii(root, undefined);
 
   const model: RocketModel = {
     formatVersion: rootEl.getAttribute('version') ?? '',
@@ -186,6 +189,20 @@ export async function parseOrk(buffer: ArrayBuffer): Promise<RocketModel> {
   const meta = parseOrkWebMeta(xml);
   if (meta) (model as RocketModel & { webMeta?: unknown }).webMeta = meta;
   return model;
+}
+
+/** 沿父链继承半径：官方管内件（innertube/tubecoupler/centeringring/bulkhead 等）无 <radius> 时继承所在管半径，杜绝 NaN */
+function inheritRadii(node: RocketComponent, parentRadius: number | undefined): void {
+  if (node.type !== 'nosecone' && !Number.isFinite(node.radius)) {
+    // 有最近祖先半径则继承；否则（理论上不存在）用 0 兜底避免 NaN 扩散
+    node.radius = Number.isFinite(parentRadius) ? (parentRadius as number) : 0;
+  }
+  if (!Number.isFinite(node.aftRadius)) {
+    // 鼻锥半径 0 为尖端语义；aftRadius 缺失时继承所在管半径
+    node.aftRadius = node.type === 'nosecone' && Number.isFinite(parentRadius) ? (parentRadius as number) : node.radius;
+  }
+  const cur = Number.isFinite(node.radius) ? node.radius : parentRadius;
+  for (const c of node.children) inheritRadii(c, cur);
 }
 
 /** 递归遍历所有组件 */
