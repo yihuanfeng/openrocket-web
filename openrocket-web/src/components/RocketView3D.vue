@@ -380,23 +380,6 @@ function draw(): void {
     : Math.min(w * 0.36 / Math.max(maxR.value * 2.2, 0.01), h * 0.66 / Math.max(maxZ, 0.05))) * scale;
   // 竖版：z=0 鼻尖在顶部，主体垂直居中；横版：z=0 鼻尖在左，主体垂直居中
   const baseY = isH.value ? cyp : cyp - maxZ * unit * 0.5;
-  const axOff = (z: number) => (isH.value ? cxp - maxZ * unit * 0.5 + z * unit : 0);
-  const axPos3 = (z: number) => (isH.value ? axOff(z) : baseY + z * unit);
-
-  // 地面阴影（竖版在底部；横版在尾部右侧）
-  ctx.save();
-  const shCX = isH.value ? cxp + maxZ * unit * 0.5 + 8 : cxp;
-  const shCY = isH.value ? cyp : baseY + maxZ * unit + 8;
-  ctx.translate(shCX, shCY);
-  ctx.scale(isH.value ? 0.3 : 1, isH.value ? 1 : 0.24);
-  const shR = Math.max(maxR.value * unit * 2.2, 20);
-  const grad = ctx.createRadialGradient(0, 0, 2, 0, 0, shR);
-  grad.addColorStop(0, 'rgba(0,0,0,0.42)');
-  grad.addColorStop(0.7, 'rgba(0,0,0,0.16)');
-  grad.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = grad;
-  ctx.beginPath(); ctx.arc(0, 0, shR, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
 
   // 变换 + 深度排序（轨道球：先绕竖直轴 yaw，再绕屏幕水平轴 pitch，任意方向自由旋转）
   // 投影后按包围盒居中——旋转锚点为火箭中心而非鼻尖
@@ -434,6 +417,32 @@ function draw(): void {
   const bounds = { minX: bMinX + offX, maxX: bMaxX + offX, minY: bMinY + offY, maxY: bMaxY + offY };
   tris.sort((a, b) => a.depth - b.depth);
 
+  // 中心轴点投影（与主渲染同一矩阵 + 同一居中偏移）：供阴影/渐变/刻度/CG-CP 等随火箭跟随
+  const projAxis = (z: number) => {
+    const cY = Math.cos(rotY), sY = Math.sin(rotY);
+    const c2 = Math.cos(tilt), s2 = Math.sin(tilt);
+    const x1 = z * sY, z1 = z * cY; // (0,0,z) 绕竖直轴
+    const y2 = -z1 * s2, z2 = z1 * c2; // 绕水平轴
+    if (isH.value) return { x: offX + z2 * unit, y: offY + y2 * unit };
+    return { x: offX + x1 * unit, y: offY + z2 * unit };
+  };
+
+  // 地面阴影（贴旋转后火箭尾端，随火箭跟随；竖版在底部、横版在尾端）
+  ctx.save();
+  const shP = projAxis(maxZ);
+  const shCX = isH.value ? shP.x + 8 : shP.x;
+  const shCY = isH.value ? shP.y : shP.y + 8;
+  ctx.translate(shCX, shCY);
+  ctx.scale(isH.value ? 0.3 : 1, isH.value ? 1 : 0.24);
+  const shR = Math.max(maxR.value * unit * 2.2, 20);
+  const grad = ctx.createRadialGradient(0, 0, 2, 0, 0, shR);
+  grad.addColorStop(0, 'rgba(0,0,0,0.42)');
+  grad.addColorStop(0.7, 'rgba(0,0,0,0.16)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.arc(0, 0, shR, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
   lastTris.length = 0;
   lastTris.push(...tris);
   const xt = xrayT.value;
@@ -462,10 +471,9 @@ function draw(): void {
       ctx.stroke();
     } else {
       const mat = xt <= 0.01 ? getPat(t.kind, ctx) : null;
-      // 轴向渐变：跨整个部件连续（前段提亮 → 后段压暗），相邻 quad 共享端点 → 无箍线
-      const axA = isH.value ? axPos3(t.z0) : axPos3(t.z0);
-      const axB = isH.value ? axPos3(t.z1) : axPos3(t.z1);
-      const g2 = ctx.createLinearGradient(isH.value ? axA : 0, isH.value ? 0 : axA, isH.value ? axB : 0, isH.value ? 0 : axB);
+      // 轴向渐变：跨整个部件连续（前段提亮 → 后段压暗），沿旋转后中心轴投影（随火箭跟随，无箍线）
+      const pa = projAxis(t.z0), pb = projAxis(t.z1);
+      const g2 = ctx.createLinearGradient(pa.x, pa.y, pb.x, pb.y);
       g2.addColorStop(0, scaleRGB(t.color, 1.16));
       g2.addColorStop(0.5, t.color);
       g2.addColorStop(1, scaleRGB(t.color, 0.74));
@@ -493,15 +501,6 @@ function draw(): void {
   // CG / CP 位置标记：中心轴上点随旋转矩阵投影（拖动视角时标记跟随火箭），标签引到侧旁避免遮挡
   const c = ctx;
   const marks: { x: number; y: number; kind: string; z: number }[] = [];
-  // 与主渲染同一轨道球投影 + 同一居中偏移（中心轴 x=0,y=0 的点）
-  const projAxis = (z: number) => {
-    const cY = Math.cos(rotY), sY = Math.sin(rotY);
-    const c2 = Math.cos(tilt), s2 = Math.sin(tilt);
-    const x1 = z * sY, z1 = z * cY; // (0,0,z) 绕竖直轴
-    const y2 = -z1 * s2, z2 = z1 * c2; // 绕水平轴
-    if (isH.value) return { x: offX + z2 * unit, y: offY + y2 * unit };
-    return { x: offX + x1 * unit, y: offY + z2 * unit };
-  };
   const mk = (z: number, color: string, label: string) => {
     if (!(z >= 0 && z <= maxZ)) return;
     const p = projAxis(z);
@@ -533,41 +532,33 @@ function draw(): void {
   if (props.cpX !== null && props.cpX !== undefined) mk(props.cpX, '#ff3b30', 'CP');
   markSpots.value = marks;
 
-  // Z 轴刻度尺（竖版中心线垂直+右侧小字；横版中心线水平+下方小字）
+  // Z 轴刻度尺：沿旋转后中心轴投影分布（随火箭旋转跟随），刻度短线垂直于轴投影方向
+  const pHead = projAxis(0), pTail = projAxis(maxZ);
+  const dX = pTail.x - pHead.x, dY = pTail.y - pHead.y;
+  const axLen = Math.hypot(dX, dY);
+  // 轴投影法向（刻度短线方向）；轴垂直于屏幕时退化为水平短线
+  const nx = axLen > 0.001 ? -dY / axLen : (isH.value ? 0 : 1);
+  const ny = axLen > 0.001 ? dX / axLen : 0;
   c.strokeStyle = 'rgba(210,232,255,0.3)';
   c.lineWidth = 1;
   c.font = '400 10px -apple-system, "SF Pro Text", "PingFang SC", sans-serif';
   const ticks = 5;
   for (let i = 0; i <= ticks; i++) {
     const z = (maxZ * i) / ticks;
-    const ap = axPos3(z);
-    if (isH.value) {
-      c.beginPath();
-      c.moveTo(ap, cyp - 5);
-      c.lineTo(ap, cyp + 5);
-      c.stroke();
-      c.fillStyle = 'rgba(210,232,255,0.55)';
-      c.textAlign = 'center';
-      c.fillText(z.toFixed(2), ap, cyp + 16);
-    } else {
-      c.beginPath();
-      c.moveTo(cxp - 5, ap);
-      c.lineTo(cxp + 5, ap);
-      c.stroke();
-      c.fillStyle = 'rgba(210,232,255,0.55)';
-      c.textAlign = 'left';
-      c.fillText(z.toFixed(2), cxp + 9, ap + 3);
-    }
+    const p = projAxis(z);
+    c.beginPath();
+    c.moveTo(p.x - nx * 5, p.y - ny * 5);
+    c.lineTo(p.x + nx * 5, p.y + ny * 5);
+    c.stroke();
+    c.fillStyle = 'rgba(210,232,255,0.55)';
+    c.textAlign = 'center';
+    c.fillText(z.toFixed(2), p.x + nx * 12, p.y + ny * 12 + 4);
   }
+  // Z 轴标签：跟随旋转后轴端点
   c.fillStyle = 'rgba(210,232,255,0.6)';
   c.font = '500 10px -apple-system, "SF Pro Text", "PingFang SC", sans-serif';
-  if (isH.value) {
-    c.textAlign = 'left';
-    c.fillText(t('view3d.axisZ')+'→', cxp - maxZ * unit * 0.5, cyp + 32);
-  } else {
-    c.textAlign = 'left';
-    c.fillText(t('view3d.axisZ'), cxp + 9, baseY + maxZ * unit + 14);
-  }
+  c.textAlign = 'left';
+  c.fillText(t('view3d.axisZ') + (isH.value ? '→' : ''), pTail.x + nx * 16 + 2, pTail.y + ny * 16 + 4);
 
   // XYZ 轴指示器（左下角罗盘，随视角旋转；与主渲染同一轨道球矩阵）
   const ox = 52, oy = h - 62;
