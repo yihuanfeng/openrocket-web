@@ -38,7 +38,13 @@ const view2dRef = ref<InstanceType<typeof RocketView2D> | null>(null);
 const view3dRef = ref<InstanceType<typeof RocketView3D> | null>(null);
 
 // —— 新布局：功能区 Tab（设计 / 发动机配置 / 模拟发射）——
-const activeTab = ref<'design' | 'motor' | 'sim' | 'db'>('design');
+const activeTab = ref<'design' | 'motor' | 'sim'>('design');
+
+/** 发动机库独立页面（hash 路由 #/motors，全屏覆盖主布局） */
+const dbOpen = ref(false);
+function syncHash() { dbOpen.value = window.location.hash === '#/motors'; }
+function openDb() { window.location.hash = '#/motors'; dbOpen.value = true; }
+function closeDb() { window.location.hash = ''; dbOpen.value = false; }
 // 主布局：v=上下（功能区在上、预览在下）、h=左右（功能区在左、预览在右）
 type LayoutMode = 'v' | 'h';
 const layoutMode = ref<LayoutMode>((localStorage.getItem('ork:layout') as LayoutMode) || 'v');
@@ -772,6 +778,10 @@ function closeMenu(e: MouseEvent): void {
   if (menuOpen.value && fileMenuEl.value && !fileMenuEl.value.contains(e.target as Node)) menuOpen.value = false;
 }
 onMounted(() => window.addEventListener('mousedown', closeMenu));
+onMounted(() => {
+  syncHash();
+  window.addEventListener('hashchange', syncHash);
+});
 onBeforeUnmount(() => window.removeEventListener('mousedown', closeMenu));
 
 // —— 侧栏宽度：可拖拽调宽 + localStorage 记忆 ——
@@ -1063,6 +1073,7 @@ function exportPdf(): void {
 <title>${m.name} — 设计报告</title>
 <style>
   @page { size: A4; margin: 14mm; }
+  .db-screen { position: fixed; inset: 0; z-index: 60; background: #07121f; }
   body { font: 11px/1.5 -apple-system, "PingFang SC", sans-serif; color: #1d1d1f; margin: 0; }
   h1 { font-size: 20px; margin: 0 0 2px; }
   .meta { color: #6e6e73; font-size: 11px; margin-bottom: 14px; }
@@ -1128,6 +1139,7 @@ function engineTip(): string {
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown);
   window.removeEventListener('beforeunload', onBeforeUnload);
+  window.removeEventListener('hashchange', syncHash);
   if (saveTimer) clearTimeout(saveTimer);
 });
 
@@ -1160,6 +1172,16 @@ function stabNote(): string {
 
 <template>
   <div class="app" @dragover.prevent @drop="onDrop">
+    <!-- 发动机库独立页面（全屏） -->
+    <div v-if="dbOpen" class="db-screen">
+      <MotorDatabasePanel
+        :saved-motors="customMotors"
+        @close="closeDb"
+        @add-motor="(m: MotorSpec) => addCustomMotor(m)"
+        @remove-motor="(id: string) => (customMotors = customMotors.filter((m) => m.id !== id))"
+      />
+    </div>
+
     <div v-if="restoreInfo" class="restore-bar">
       <span>{{ t('app.restore.title', { time: restoreInfo.time }) }}</span>
       <button class="btn primary sm" @click="restoreAuto">{{ t('app.restore.restore') }}</button>
@@ -1195,6 +1217,8 @@ function stabNote(): string {
         </div>
       </div>
 
+      <button class="btn onDark db-trigger" :title="t('app.db')" @click="openDb">🗄 {{ t('app.db') }}</button>
+
       <div class="spacer"></div>
       <span v-if="loading" class="status">{{ t('common.loading') }}</span>
       <span v-if="error" class="error">{{ t('common.error', { msg: error }) }}</span>
@@ -1213,9 +1237,6 @@ function stabNote(): string {
       </button>
       <button :class="{ on: activeTab === 'sim' }" @click="activeTab = 'sim'">
         <span class="tab-ic">🚀</span>{{ t('app.tabs.flight') }}<span class="tab-en">Flight</span>
-      </button>
-      <button :class="{ on: activeTab === 'db' }" @click="activeTab = 'db'">
-        <span class="tab-ic">🗄</span>{{ t('app.tabs.db') }}<span class="tab-en">Motors DB</span>
       </button>
       <span v-if="dirty" class="dirty-tag" :title="t('app.unsavedTip')">{{ t('app.unsaved') }}</span>
     </nav>
@@ -1269,15 +1290,6 @@ function stabNote(): string {
           @set-mount-motor="setMountMotor"
           @set-ign-delay="setIgnDelay"
           @motor-import="onMotorImport"
-        />
-      </template>
-
-      <!-- 发动机库 Tab -->
-      <template v-else-if="activeTab === 'db'">
-        <MotorDatabasePanel
-          :saved-motors="customMotors"
-          @add-motor="(m: MotorSpec) => addCustomMotor(m)"
-          @remove-motor="(id: string) => (customMotors = customMotors.filter((m) => m.id !== id))"
         />
       </template>
 
