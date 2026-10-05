@@ -109,6 +109,7 @@ npm run gen:thumbs # 重生成示例缩略图（改 presets/geometry 后必须�
 - 组件全覆盖：boosters/pods 并联级布局（GeoSeg.xOff）、railbutton、tubefinset 全部可创建，组件库无"即将支持"
 - 发动机库 8 → 27 款（A3/A8/B4/B6/C6/C11/C5/D12/E9/E12/F15 各延迟变体），D12 直径修正为 24mm
 - **发动机配置重构（2026-10-05，P0–P2 全量）**：逐电机座独立选电机/移除/点火时序（`configs[].mounts[]`，路径定位）；直径适配过滤（`mountItems.fitting`）；配置+自定义电机随 autosave 与 .ork 持久化（`modelToOrkBlob(model, meta)` XML 注释）；属性面板电机下拉与配置面板统一通路（`motorIdChange` 事件）；jsEngine 多电机时序点火仿真（同时点火叠加/级间延迟）；电机库 26→27 款（新增 C5-3，Estes 官方 + ThrustCurve 双源）
+- **.ork 半径继承修复（2026-10-05）**：官方管内件（innertube/tubecoupler/centeringring/bulkhead 等）XML 通常无 `<radius>`，新增 `inheritRadii()` 在 parseOrk 后沿父链填充 radius/aftRadius（含鼻锥 aftRadius 缺失、内管套内管场景），杜绝 NaN 座径导致发动机无法选装；两级高功率示例 4 座座径全部 101.6mm，16 个官方示例管类组件 NaN=0
 - 伞/飘带回归机身管内前段（bodytube 子组件 + offset）
 - 3D 部件程序化材质纹理（碳纤维/拉丝/玻纤/布料）
 - CG/CP 标记 tooltip（2D SVG + 3D Canvas 命中检测）
