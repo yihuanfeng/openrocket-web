@@ -25,7 +25,8 @@ import { PRESETS } from './lib/presets';
 import { modelToOrkBlob, type OrkWebMeta } from './lib/orkSerializer';
 
 const { t, locale } = useI18n();
-const viewMode = ref<'2d' | '3d'>('2d');
+const viewMode = ref<'2d' | '3d'>(localStorage.getItem('ork:view') === '2d' ? '2d' : '3d');
+watch(viewMode, (v) => localStorage.setItem('ork:view', v));
 // 部署路径基准（GH Pages 子路径部署兼容；本地/根路径为 './'）
 const base = import.meta.env.BASE_URL;
 // 默认横置摆放（无存储记录时）；用户切换后尊重 localStorage
