@@ -204,6 +204,21 @@ onBeforeUnmount(() => {
 watch(() => props.profile, render);
 
 const currentMotor = computed(() => props.motors.find((m) => m.id === props.motorId) ?? props.motors[0]);
+
+/** 顶部发动机下拉按来源分组：内置 Estes 全系 / motor-database 各厂商 / 用户导入 */
+const motorGroups = computed(() => {
+  const groups = new Map<string, typeof props.motors>();
+  for (const m of props.motors) {
+    let label: string;
+    if (m.custom) label = t('sim.motorGroup.custom');
+    else if (m.manufacturer) label = `${t('sim.motorGroup.db')} · ${m.manufacturer}`;
+    else label = t('sim.motorGroup.builtin');
+    const g = groups.get(label) ?? [];
+    g.push(m);
+    groups.set(label, g);
+  }
+  return [...groups.entries()].map(([label, items]) => ({ label, items }));
+});
 const engInput = ref<HTMLInputElement | null>(null);
 function onEngChange(e: Event) {
   const id = (e.target as HTMLSelectElement).value;
@@ -238,9 +253,11 @@ function onEngFile(e: Event) {
     <div class="motor-bar">
       <span class="motor-label">{{ t('sim.motor') }}</span>
       <select class="motor-select" :value="motorId" @change="onEngChange">
-        <option v-for="m in motors" :key="m.id" :value="m.id">
-          {{ m.name }}（{{ m.class }} · {{ m.totalImpulseNs.toFixed(1) }} N·s · {{ t('sim.delay', { d: m.delay }) }}）
-        </option>
+        <optgroup v-for="g in motorGroups" :key="g.label" :label="g.label">
+          <option v-for="m in g.items" :key="m.id" :value="m.id">
+            {{ m.name }}（{{ m.class }} · {{ m.totalImpulseNs.toFixed(1) }} N·s · {{ t('sim.delay', { d: m.delay }) }}）
+          </option>
+        </optgroup>
       </select>
       <span v-if="currentMotor" class="motor-specs">
         {{ t('sim.peak', { v: currentMotor.maxThrust.toFixed(1) }) }} · {{ t('sim.burn', { v: currentMotor.burnTime.toFixed(1) }) }} · {{ (currentMotor.mass0 * 1000).toFixed(0) }} g

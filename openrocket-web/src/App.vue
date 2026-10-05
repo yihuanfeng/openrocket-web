@@ -16,8 +16,10 @@ import ExamplesPanel from './components/ExamplesPanel.vue';
 import SimulationPanel from './components/SimulationPanel.vue';
 import { MOTORS, DEFAULT_MOTOR_ID, motorById, parseEngFile } from './lib/engines';
 import type { MotorSpec } from './lib/engines';
+import { CURATED_MOTORS } from './lib/motorDB';
 import ComponentLibrary from './components/ComponentLibrary.vue';
 import MotorConfigPanel from './components/MotorConfigPanel.vue';
+import MotorDatabasePanel from './components/MotorDatabasePanel.vue';
 import { makeComponent } from './lib/componentFactory';
 import { PRESETS } from './lib/presets';
 import { modelToOrkBlob, type OrkWebMeta } from './lib/orkSerializer';
@@ -36,7 +38,7 @@ const view2dRef = ref<InstanceType<typeof RocketView2D> | null>(null);
 const view3dRef = ref<InstanceType<typeof RocketView3D> | null>(null);
 
 // —— 新布局：功能区 Tab（设计 / 发动机配置 / 模拟发射）——
-const activeTab = ref<'design' | 'motor' | 'sim'>('design');
+const activeTab = ref<'design' | 'motor' | 'sim' | 'db'>('design');
 // 主布局：v=上下（功能区在上、预览在下）、h=左右（功能区在左、预览在右）
 type LayoutMode = 'v' | 'h';
 const layoutMode = ref<LayoutMode>((localStorage.getItem('ork:layout') as LayoutMode) || 'v');
@@ -516,7 +518,7 @@ function activeConfig(): FlightConfig {
   ensureMounts(cfg);
   return cfg;
 }
-const allMotors = computed(() => [...MOTORS, ...customMotors.value]);
+const allMotors = computed(() => [...MOTORS, ...CURATED_MOTORS, ...customMotors.value]);
 function motorByIdSafe(id: string): MotorSpec | null {
   return allMotors.value.find((m) => m.id === id) ?? null;
 }
@@ -658,7 +660,7 @@ async function runCompareAll(): Promise<void> {
   try {
     const eng = getEngineBridge();
     if (eng.kind === 'none') return;
-    const all = allMotors.value;
+    const all = MOTORS;
     const rows = await Promise.all(all.map(async (m) => ({ m, p: await eng.simulate(model.value as RocketModel, [{ motor: m, ignitionDelay: 0 }], simConditions.value) })));
     compareRows.value = rows
       .filter((r): r is { m: MotorSpec; p: FlightProfile } => !!r.p && !r.p.error)
@@ -710,6 +712,11 @@ async function runOptimizeDelay() {
 function onMotorImport(text: string) {
   const m = parseEngFile(text);
   if (!m) return;
+  addCustomMotor(m);
+}
+
+/** 加入自定义发动机（管理页/文件导入共用）：去重、自动填入首个空发动机座 */
+function addCustomMotor(m: MotorSpec) {
   customMotors.value = [...customMotors.value.filter((x) => x.id !== m.id), m];
   const first = activeConfig().mounts.find((mc) => mc.motorId === null);
   if (first) { first.motorId = m.id; scheduleAutoSave(); }
@@ -1207,6 +1214,9 @@ function stabNote(): string {
       <button :class="{ on: activeTab === 'sim' }" @click="activeTab = 'sim'">
         <span class="tab-ic">🚀</span>{{ t('app.tabs.flight') }}<span class="tab-en">Flight</span>
       </button>
+      <button :class="{ on: activeTab === 'db' }" @click="activeTab = 'db'">
+        <span class="tab-ic">🗄</span>{{ t('app.tabs.db') }}<span class="tab-en">Motors DB</span>
+      </button>
       <span v-if="dirty" class="dirty-tag" :title="t('app.unsavedTip')">{{ t('app.unsaved') }}</span>
     </nav>
 
@@ -1259,6 +1269,15 @@ function stabNote(): string {
           @set-mount-motor="setMountMotor"
           @set-ign-delay="setIgnDelay"
           @motor-import="onMotorImport"
+        />
+      </template>
+
+      <!-- 发动机库 Tab -->
+      <template v-else-if="activeTab === 'db'">
+        <MotorDatabasePanel
+          :saved-motors="customMotors"
+          @add-motor="(m: MotorSpec) => addCustomMotor(m)"
+          @remove-motor="(id: string) => (customMotors = customMotors.filter((m) => m.id !== id))"
         />
       </template>
 

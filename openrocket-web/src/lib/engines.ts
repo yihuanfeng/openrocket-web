@@ -21,6 +21,9 @@ export interface MotorSpec {
   curve: { time: number[]; thrust: number[] }; // 分段线性（面积≈总冲）
   source: string;          // 数据来源标注
   custom?: boolean;        // 用户导入
+  manufacturer?: string;   // 厂商（motor-database 精选库）
+  caseInfo?: string;
+  propInfo?: string;
 }
 
 /** 由规格生成梯形曲线：0→peak(0.1B)→peak→0(B)，平台宽度反解使面积=总冲；平台为负则尖峰 */
@@ -263,6 +266,51 @@ export function parseEngFile(text: string): MotorSpec | null {
     mass0: m0, mass1: m1, propellant,
     curve: { time: pts.map((p) => p[0]), thrust: pts.map((p) => p[1]) },
     source: '用户导入 RASP/ENG 文件',
+    custom: true,
+  };
+}
+
+/** 解析 RASP XML（.rse，ThrustCurve 下载格式）→ MotorSpec；失败返回 null。
+ *  属性含 mfg/code/dia(英寸)/len(英寸)/delays/avgThrust/peakThrust/Itot/burn-time/initWt/propWt，数据点为 <eng-data t f m cg/> */
+export function parseRseFile(text: string): MotorSpec | null {
+  const attrs = text.match(/<engine\s([^>]*)>/);
+  if (!attrs) return null;
+  const a: Record<string, string> = {};
+  for (const m of attrs[1].matchAll(/([A-Za-z-]+)\s*=\s*"([^"]*)"/g)) a[m[1]] = m[2];
+  const code = (a.code ?? a.Code ?? '').trim();
+  if (!code) return null;
+  const mfg = (a.mfg ?? 'ThrustCurve').trim();
+  const name = `${mfg.replace(/\s+/g, '')} ${code}`.trim();
+  const delay = parseInt(String(a.delays ?? '0').match(/\d+/)?.[0] ?? '0', 10) || 0;
+  // ThrustCurve .rse 的 dia/len 属性单位为毫米（与 motor-database metadata 一致，非 RASP 英寸惯例）
+  const diaMM = parseFloat(a.dia ?? '0') || 0;
+  const lenMM = parseFloat(a.len ?? '0') || 0;
+  const propG = parseFloat(a.propWt ?? '0') || 0;   // 推进剂（克）
+  const initG = parseFloat(a.initWt ?? '0') || 0;   // 初始重量（克）
+  const pts: number[][] = [];
+  const re = /<eng-data\s+t="([\d.\-eE]+)"\s+f="([\d.\-eE]+)"/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    const t = parseFloat(m[1]); const f = parseFloat(m[2]);
+    if (Number.isFinite(t) && Number.isFinite(f)) pts.push([t, f]);
+  }
+  if (pts.length < 2) return null;
+  let impulse = 0;
+  for (let i = 1; i < pts.length; i++) impulse += 0.5 * (pts[i - 1][1] + pts[i][1]) * (pts[i][0] - pts[i - 1][0]);
+  const peak = Math.max(...pts.map((p) => p[1]));
+  const end = pts[pts.length - 1][0];
+  const propKg = propG / 1000;
+  const m1 = Math.max((initG - propG) / 1000, 0.004);
+  const m0 = initG / 1000;
+  return {
+    id: 'custom-' + name.toLowerCase().replace(/[^a-z0-9-]/g, ''),
+    name, class: (code[0] ?? 'C').toUpperCase(),
+    diameterMM: Math.round(diaMM), lengthMM: Math.round(lenMM),
+    delay, burnTime: Math.round(end * 100) / 100, maxThrust: Math.round(peak * 100) / 100,
+    totalImpulseNs: Math.round(impulse * 100) / 100,
+    mass0: m0, mass1: m1, propellant: propKg,
+    curve: { time: pts.map((p) => p[0]), thrust: pts.map((p) => p[1]) },
+    source: `RASP XML（${mfg}）实测数据`,
     custom: true,
   };
 }

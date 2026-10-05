@@ -12,7 +12,7 @@
 - 组件树 / 组件库 / 属性面板（增删改、轴向调整、半径继承）
 - 组件全覆盖：级 / 助推器（并联级）/ 捆绑舱 / 头锥 / 机身管 / 过渡段 / 梯形·椭圆·自由·管尾翼 / 发射导环 / 导轨按钮 / 内部件（内管·管接头·定心环·隔框·挡块）/ 回收（伞·飘带·减震绳）/ 配重 —— 全部可创建，无"即将支持"
 - 示例面板（6 个内置示例 + 16 个官方 .ork 示例，带缩略图）
-- 发动机配置（26 款内置发动机 + .eng 导入）
+- 发动机配置（27 款内置发动机 + .eng/.rse 导入）
 - 仿真（JS 引擎：分析 + 2DOF 飞行仿真，发动机延迟扫描、多发动机对比）
 - 设置面板（主布局切换、单位、外观[待开发]）
 - UI：高饱和蓝主调、直线切分、紧凑
@@ -117,6 +117,7 @@ npm run gen:thumbs # 重生成示例缩略图（改 presets/geometry 后必须�
 - **多配置对比曲线图**：compare tab 增 ECharts 高度-时间曲线叠加（27 款并行仿真后对比，当前配置高亮；chartC 惰性 init 适配 tab 后挂载容器）
 - **仿真精度修复（2026-10-05，3 个原 bug）**：① simCdA 的 walk 从未调用 → 阻力系数恒 0（纵向/水平阻力从未生效）；② 开伞阻力双重放大（dragCoef=30 × cdaEff=max(cda*30,..)=900 倍 → 终端速度 1.2m/s、降落拖 170s）→ 去掉 dragCoef 重复系数；③ 水平轴 Heun 下降段刚度超调越过风速（漂移虚高 817m）→ limRel 钳制相对风速不越过当地风。修复后 C6-5 入门火箭：远地点 226.6m / 总飞行 36.6s / 风 5m·s⁻¹ 漂移 134m
 - CG/CP 标记 tooltip（2D SVG + 3D Canvas 命中检测）
+- **发动机管理页 + motor-database 实测库（2026-10-05）**：「发动机库」tab（`MotorDatabasePanel.vue`）三栏布局——筛选（厂商/冲量级/直径/类型/延迟/搜索）+ 分页列表（索引 1076 型号）+ 详情（ECharts 推力曲线按需 fetch raw 加载、规格表、多数据文件切换、「加入我的库」→ customMotors）。数据链：文件名 hash=simfileId → simfile_to_motor.json → motorId → motors_metadata.json（`scripts/fetch-motor-db.ts` 可重跑）；精选 414 款实测（含曲线）并入 allMotors，配置/仿真下拉按厂商 optgroup 分组；`parseRseFile` 支持 .rse XML 导入
 - GitHub Pages 自动部署 workflow（已提交，**待用户 push + 在仓库 Settings→Pages 开启 GitHub Actions**）
 - 资源全部改为 BASE_URL 相对路径（子路径部署不 404；组件图标已修复）
 
@@ -127,6 +128,6 @@ npm run gen:thumbs # 重生成示例缩略图（改 presets/geometry 后必须�
 3. 工程级/高发比示例的内部件树结构梳理（内部件应挂 bodytube 下而非 stage 直系，当前导致尾部组件略偏后）
 4. 设置面板「外观」tab
 5. 官方材质库（材料数据）借用
-6. **ThrustCurve 实测曲线库**：当前内置 27 款为规格梯形近似；官方为 ThrustCurve.org 数千条实测 + 用户目录批量导入（.eng/.rse）。已有单文件 .eng 导入；目录批量导入与实测库接入是 P2-6 剩余部分
+6. **ThrustCurve 实测曲线库**：**已接入 OpenRocket motor-database（2026-10-05）**——`scripts/fetch-motor-db.ts` 克隆 openrocket/motor-database 后解析（文件名 hash=simfileId → simfile_to_motor.json → motorId → motors_metadata.json 全规格链），生成 `src/lib/motorDB/index.json`（1076 型号全量索引，含曲线文件路径）+ `curated.json`（414 款精选实测含曲线，Estes/AeroTech/Quest/Apogee/Cesaroni/Klima/Loki，按延迟变体展开命名）。管理页（`MotorDatabasePanel.vue`，「发动机库」tab）筛选/查看/管理：曲线按需 fetch raw.githubusercontent.com（parseRseFile 解析 .rse XML / parseEngFile 文本），「加入我的库」进 customMotors。精选 414 款已并入 allMotors（配置/仿真下拉按厂商 optgroup 分组）。剩余：全量 1076 款曲线离线打包（当前按需网络加载）、.rse 目录批量导入
 7. **级间点火时序精度**：jsEngine 已支持 ignitionDelay 时序，但分离逻辑仍以"主级燃尽"为界（官方为每级独立事件），多级电机配置的级间时序精确模拟待完善
 8. **WASM 引擎多电机**：WasmEngine.simulate 仍为单电机（忽略 MountedMotor 参数），多电机时序仅在 JS 引擎生效
