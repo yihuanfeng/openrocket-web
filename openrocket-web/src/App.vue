@@ -1358,7 +1358,7 @@ function stabNote(): string {
 
 /* 顶栏设置按钮 */
 .settings-btn {
-  font-size: 19px; line-height: 1; padding: 6px 11px;
+  font-size: 22px; line-height: 1; padding: 4px 11px;
   display: inline-flex; align-items: center; justify-content: center;
 }
 .settings-btn.active { background: rgba(255, 255, 255, 0.18); }
