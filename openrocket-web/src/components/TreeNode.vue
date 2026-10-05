@@ -124,7 +124,13 @@ function dropClsOf(c: RocketComponent): Record<string, boolean> {
 .row:hover { background: var(--primary-soft); }
 .row.active { background: var(--primary-soft); box-shadow: inset 2px 0 0 var(--primary); }
 .row.hover { background: var(--blue-100); box-shadow: inset 2px 0 0 var(--blue-300); }
-.toggle { width: 14px; text-align: center; color: var(--text-2); flex: none; font-size: 10px; }
+.toggle {
+  width: 22px; height: 22px; flex: none; display: grid; place-items: center;
+  text-align: center; color: var(--text-2); font-size: 13px; line-height: 1;
+  border-radius: 5px; cursor: pointer; user-select: none;
+  transition: background 0.12s, color 0.12s;
+}
+.toggle:hover { background: var(--primary-soft); color: var(--primary-strong); }
 .t-icon { width: 22px; height: auto; flex: none; opacity: 0.85; }
 .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .type { margin-left: auto; color: var(--text-3); font-size: 11px; flex: none; }

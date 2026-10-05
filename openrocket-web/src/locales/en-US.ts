@@ -22,6 +22,7 @@ export const enUS = {
     },
     db: 'Motor DB',
     dbTip: 'Motor database (motor-database measured)',
+    gh: 'GitHub source repository (yihuanfeng/openrocket-web)',
     unsaved: '● Unsaved',
     unsavedTip: 'Unsaved changes — autosaving',
     undoTip: 'Undo (Cmd/Ctrl+Z)',

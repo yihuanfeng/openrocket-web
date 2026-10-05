@@ -50,6 +50,13 @@ watch(
     open.value = new Set();
     open.value.add(props.root);
     for (const c of props.root.children) open.value.add(c);
+    // 默认展开「身体组件」（机身管）：让内部件（降落伞/内管/定心环/发动机架等）打开即见，
+    // 而不需要用户逐个点击展开——这是新手最常找不到的一层
+    const walk = (node: RocketComponent): void => {
+      if (node.type === 'bodytube') open.value.add(node);
+      for (const ch of node.children ?? []) walk(ch);
+    };
+    walk(props.root);
   },
   { immediate: true },
 );

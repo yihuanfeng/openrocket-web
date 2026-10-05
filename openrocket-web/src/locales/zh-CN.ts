@@ -22,6 +22,7 @@ export const zhCN = {
     },
     db: '发动机库',
     dbTip: '发动机数据库（motor-database 实测）',
+    gh: 'GitHub 源码仓库（yihuanfeng/openrocket-web）',
     unsaved: '● 未保存',
     unsavedTip: '有未落盘更改，正在自动保存',
     undoTip: '撤销（Cmd/Ctrl+Z）',
