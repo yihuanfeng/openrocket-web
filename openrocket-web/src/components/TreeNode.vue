@@ -79,7 +79,7 @@ function dropClsOf(c: RocketComponent): Record<string, boolean> {
       @drop="emit('drop', $event, comp)"
       @dragend="emit('dragend')"
     >
-      <span class="toggle" @click.stop="emit('toggle', comp)">{{ comp.children.length ? (open.has(comp) ? '▾' : '▸') : '·' }}</span>
+      <span class="toggle" @click.stop="emit('toggle', comp)">{{ comp.children.length ? (open.has(comp) ? '▼' : '▶') : '·' }}</span>
       <img class="t-icon" :src="iconOf(comp)" alt="" draggable="false" />
       <span class="label">{{ comp.name }}</span>
       <span class="type">{{ typeOf(comp) }}</span>
@@ -125,8 +125,8 @@ function dropClsOf(c: RocketComponent): Record<string, boolean> {
 .row.active { background: var(--primary-soft); box-shadow: inset 2px 0 0 var(--primary); }
 .row.hover { background: var(--blue-100); box-shadow: inset 2px 0 0 var(--blue-300); }
 .toggle {
-  width: 22px; height: 22px; flex: none; display: grid; place-items: center;
-  text-align: center; color: var(--text-2); font-size: 13px; line-height: 1;
+  width: 24px; height: 24px; flex: none; display: grid; place-items: center;
+  text-align: center; color: var(--text-2); font-size: 15px; line-height: 1;
   border-radius: 5px; cursor: pointer; user-select: none;
   transition: background 0.12s, color 0.12s;
 }
