@@ -532,13 +532,15 @@ function draw(): void {
   if (props.cpX !== null && props.cpX !== undefined) mk(props.cpX, '#ff3b30', 'CP');
   markSpots.value = marks;
 
-  // Z 轴刻度尺：沿旋转后中心轴投影分布（随火箭旋转跟随），刻度短线垂直于轴投影方向
+  // Z 轴刻度尺：沿旋转后中心轴投影分布（随火箭旋转跟随），整体偏移到火箭表面外侧
+  // （正交旋转 + 正交投影下，半径投影最大长度恒为 r·unit，与视角无关）
   const pHead = projAxis(0), pTail = projAxis(maxZ);
   const dX = pTail.x - pHead.x, dY = pTail.y - pHead.y;
   const axLen = Math.hypot(dX, dY);
   // 轴投影法向（刻度短线方向）；轴垂直于屏幕时退化为水平短线
   const nx = axLen > 0.001 ? -dY / axLen : (isH.value ? 0 : 1);
   const ny = axLen > 0.001 ? dX / axLen : 0;
+  const rVis = maxR.value * unit + 10; // 旋转后可见最大半径 + 间隙
   c.strokeStyle = 'rgba(210,232,255,0.3)';
   c.lineWidth = 1;
   c.font = '400 10px -apple-system, "SF Pro Text", "PingFang SC", sans-serif';
@@ -546,19 +548,20 @@ function draw(): void {
   for (let i = 0; i <= ticks; i++) {
     const z = (maxZ * i) / ticks;
     const p = projAxis(z);
+    const cx = p.x + nx * rVis, cy = p.y + ny * rVis;
     c.beginPath();
-    c.moveTo(p.x - nx * 5, p.y - ny * 5);
-    c.lineTo(p.x + nx * 5, p.y + ny * 5);
+    c.moveTo(cx - nx * 5, cy - ny * 5);
+    c.lineTo(cx + nx * 5, cy + ny * 5);
     c.stroke();
     c.fillStyle = 'rgba(210,232,255,0.55)';
     c.textAlign = 'center';
-    c.fillText(z.toFixed(2), p.x + nx * 12, p.y + ny * 12 + 4);
+    c.fillText(z.toFixed(2), cx + nx * 12, cy + ny * 12 + 4);
   }
-  // Z 轴标签：跟随旋转后轴端点
+  // Z 轴标签：跟随旋转后轴端点，同样偏移到表面外侧
   c.fillStyle = 'rgba(210,232,255,0.6)';
   c.font = '500 10px -apple-system, "SF Pro Text", "PingFang SC", sans-serif';
   c.textAlign = 'left';
-  c.fillText(t('view3d.axisZ') + (isH.value ? '→' : ''), pTail.x + nx * 16 + 2, pTail.y + ny * 16 + 4);
+  c.fillText(t('view3d.axisZ') + (isH.value ? '→' : ''), pTail.x + nx * (rVis + 6) + 2, pTail.y + ny * (rVis + 6) + 4);
 
   // XYZ 轴指示器（左下角罗盘，随视角旋转；与主渲染同一轨道球矩阵）
   const ox = 52, oy = h - 62;
