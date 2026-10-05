@@ -4,9 +4,10 @@
 
 **在线预览**：https://yihuanfeng.github.io/openrocket-web/ （GitHub Pages 自动部署）
 
-![主界面（火箭设计与 2D/3D 预览）](docs/screenshot-main.png)
-
-![发动机库（motor-database 1076 款实测，顶部筛选 + 可排序表格）](docs/screenshot-motors.png)
+<p align="center">
+  <img src="docs/screenshot-main.png" width="49%" alt="主界面（火箭设计与 2D/3D 预览）" />
+  <img src="docs/screenshot-motors.png" width="49%" alt="发动机库（motor-database 1076 款实测，顶部筛选 + 可排序表格）" />
+</p>
 
 ## 功能
 
