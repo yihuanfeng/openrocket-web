@@ -108,13 +108,85 @@ function resize(): void {
   instB?.resize();
 }
 
+const summaryItems = (p: FlightProfile) => {
+  const items: Array<[string, string]> = [
+    [t('sim.maxAlt'), `${p.maxAltitude_m.toFixed(1)} m`],
+    [t('sim.maxVel'), `${p.maxVelocity_ms.toFixed(1)} m/s`],
+    [t('sim.maxAcc'), `${p.maxAcceleration_ms2.toFixed(1)} m/s²`],
+    [t('sim.maxMach'), p.maxMachNumber.toFixed(3)],
+    [t('sim.windDrift'), `${p.windDrift_m.toFixed(1)} m`],
+    [t('sim.toApogee'), `${p.timeToApogee_s.toFixed(1)} s`],
+    [t('sim.totalTime'), `${p.flightTime_s.toFixed(1)} s`],
+  ];
+  if (p.mass_kg) items.splice(3, 0, [t('sim.launchMass'), `${(p.mass_kg * 1000).toFixed(0)} g`]);
+  if (p.twr) items.splice(4, 0, [t('sim.twr'), p.twr.toFixed(1)]);
+  if (p.launchRodVelocity_ms > 0) items.push([t('sim.rodVel'), `${p.launchRodVelocity_ms.toFixed(1)} m/s`]);
+  if (p.groundHitVelocity_ms > 0) items.push([t('sim.landVel'), `${p.groundHitVelocity_ms.toFixed(1)} m/s`]);
+  return items;
+};
+
+// —— 多配置对比曲线（ECharts，高度-时间叠加）——
+const chartC = ref<HTMLDivElement | null>(null);
+let instC: ECharts | null = null;
+const PALETTE = ['#0a84ff', '#ff7a00', '#22c55e', '#e11d48', '#a855f7', '#eab308', '#14b8a6', '#f97316', '#3b82f6', '#8b5cf6', '#10b981', '#f59e0b'];
+
+function renderCompare(): void {
+  if (!instC) return;
+  const rows = props.compareRows;
+  if (rows.length === 0) { instC.clear(); return; }
+  let tMax = 0;
+  for (const r of rows) tMax = Math.max(tMax, r.profile.time[r.profile.time.length - 1] ?? 0);
+  const series = rows.map((r, i) => {
+    const on = r.motorId === props.motorId;
+    return {
+      name: r.motorName,
+      type: 'line' as const,
+      showSymbol: false,
+      lineStyle: { width: on ? 2.6 : 1.4, color: PALETTE[i % PALETTE.length], opacity: on ? 1 : 0.55 },
+      itemStyle: { color: PALETTE[i % PALETTE.length] },
+      data: r.profile.time.map((tt, j) => [tt, r.profile.altitude[j] ?? null]),
+    };
+  });
+  instC.setOption({
+    animation: false,
+    tooltip: { trigger: 'axis', triggerOn: 'mousemove|click', renderMode: 'richText', confine: true },
+    legend: { type: 'scroll', top: 0, textStyle: { color: 'var(--text-2)', fontSize: 10 } },
+    grid: { left: 44, right: 16, top: 28, bottom: 24 },
+    xAxis: {
+      type: 'value', min: 0, max: tMax,
+      name: 't (s)', nameLocation: 'middle', nameGap: 22,
+      axisLine: C.axisLine, axisLabel: C.axisLabel, splitLine: C.splitLine, nameTextStyle: C.nameTextStyle,
+    },
+    yAxis: {
+      type: 'value', name: '高度 (m)', nameLocation: 'middle', nameGap: 30, scale: true,
+      axisLine: C.axisLine, axisLabel: C.axisLabel, splitLine: C.splitLine, nameTextStyle: C.nameTextStyle,
+    },
+    series,
+  }, true);
+}
+
+watch(
+  () => props.compareRows,
+  (rows) => {
+    // chartC 容器在 compare tab 首次激活后才挂载，onMounted 时可能不存在 → 惰性初始化
+    if (rows.length > 0 && !instC && chartC.value) instC = echarts.init(chartC.value);
+    if (tab.value === 'compare') void nextTick(renderCompare);
+  },
+  { deep: true },
+);
+watch(() => props.motorId, () => { if (tab.value === 'compare') renderCompare(); });
+
 function onTab(): void {
-  void nextTick(resize);
+  void nextTick(() => {
+    resize();
+    if (tab.value === 'compare') renderCompare();
+  });
 }
 
 onMounted(() => {
   if (chartA.value) instA = echarts.init(chartA.value);
   if (chartB.value) instB = echarts.init(chartB.value);
+  if (chartC.value) instC = echarts.init(chartC.value);
   render();
   window.addEventListener('resize', resize);
 });
@@ -123,8 +195,10 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', resize);
   instA?.dispose();
   instB?.dispose();
+  instC?.dispose();
   instA = null;
   instB = null;
+  instC = null;
 });
 
 watch(() => props.profile, render);
@@ -146,16 +220,6 @@ function onEngFile(e: Event) {
   if (!f) return;
   f.text().then((t) => { emit('motorImport', t); if (engInput.value) engInput.value.value = ''; });
 }
-
-const summaryItems = (p: FlightProfile) => [
-  [t('sim.maxAlt'), `${p.maxAltitude_m.toFixed(1)} m`],
-  [t('sim.maxVel'), `${p.maxVelocity_ms.toFixed(1)} m/s`],
-  [t('sim.maxAcc'), `${p.maxAcceleration_ms2.toFixed(1)} m/s²`],
-  [t('sim.maxMach'), p.maxMachNumber.toFixed(3)],
-  [t('sim.windDrift'), `${p.windDrift_m.toFixed(1)} m`],
-  [t('sim.toApogee'), `${p.timeToApogee_s.toFixed(1)} s`],
-  [t('sim.totalTime'), `${p.flightTime_s.toFixed(1)} s`],
-];
 </script>
 
 <template>
@@ -222,28 +286,31 @@ const summaryItems = (p: FlightProfile) => [
         <span class="opt-result">{{ t('sim.configCount', { n: compareRows.length }) }}</span>
       </div>
       <div v-if="compareRows.length === 0" class="empty">{{ t('sim.compareEmpty') }}</div>
-      <div v-else class="delay-table compare-table">
-        <table>
-          <thead><tr><th>{{ t('sim.motor') }}</th><th>{{ t('sim.maxAlt') }}</th><th>{{ t('sim.maxVel') }}</th><th>{{ t('sim.maxMach') }}</th><th>{{ t('sim.windDrift') }}</th><th>{{ t('sim.toApogee') }}</th><th>{{ t('sim.totalTime') }}</th></tr></thead>
-          <tbody>
-            <tr
-              v-for="r in compareRows"
-              :key="r.motorId"
-              :class="{ on: r.motorId === motorId }"
-              :title="t('sim.viewCurve', { name: r.motorName })""
-              @click="emit('selectCompare', r)"
-            >
-              <td class="cmp-name">{{ r.motorName }}</td>
-              <td>{{ r.profile.maxAltitude_m.toFixed(0) }} m</td>
-              <td>{{ r.profile.maxVelocity_ms.toFixed(1) }} m/s</td>
-              <td>{{ r.profile.maxMachNumber.toFixed(2) }}</td>
-              <td>{{ r.profile.windDrift_m.toFixed(0) }} m</td>
-              <td>{{ r.profile.timeToApogee_s.toFixed(1) }} s</td>
-              <td>{{ r.profile.flightTime_s.toFixed(1) }} s</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <template v-else>
+        <div ref="chartC" class="chart compare-chart"></div>
+        <div class="delay-table compare-table">
+          <table>
+            <thead><tr><th>{{ t('sim.motor') }}</th><th>{{ t('sim.maxAlt') }}</th><th>{{ t('sim.maxVel') }}</th><th>{{ t('sim.maxMach') }}</th><th>{{ t('sim.windDrift') }}</th><th>{{ t('sim.toApogee') }}</th><th>{{ t('sim.totalTime') }}</th></tr></thead>
+            <tbody>
+              <tr
+                v-for="r in compareRows"
+                :key="r.motorId"
+                :class="{ on: r.motorId === motorId }"
+                :title="t('sim.viewCurve', { name: r.motorName })""
+                @click="emit('selectCompare', r)"
+              >
+                <td class="cmp-name">{{ r.motorName }}</td>
+                <td>{{ r.profile.maxAltitude_m.toFixed(0) }} m</td>
+                <td>{{ r.profile.maxVelocity_ms.toFixed(1) }} m/s</td>
+                <td>{{ r.profile.maxMachNumber.toFixed(2) }}</td>
+                <td>{{ r.profile.windDrift_m.toFixed(0) }} m</td>
+                <td>{{ r.profile.timeToApogee_s.toFixed(1) }} s</td>
+                <td>{{ r.profile.flightTime_s.toFixed(1) }} s</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
     </div>
 
     <div v-if="profile && profile.error" class="empty warn">{{ profile.error }}</div>
@@ -292,6 +359,7 @@ const summaryItems = (p: FlightProfile) => [
 .delay-table td { padding: 3px 8px; text-align: right; font-variant-numeric: tabular-nums; }
 .delay-table tr.best { background: var(--blue-100, #e8f2ff); font-weight: 600; }
 .compare-table { max-height: 220px; cursor: pointer; }
+.compare-chart { height: 190px; margin-bottom: 8px; }
 .compare-table tbody tr:hover { background: var(--gray-50, #f5f6f8); }
 .compare-table tbody tr.on { background: var(--blue-100, #e8f2ff); font-weight: 600; }
 .compare-table td.cmp-name { text-align: left; font-weight: 600; }

@@ -320,6 +320,10 @@ export const enUS = {
     windDrift: 'Wind Drift',
     toApogee: 'Time to Apogee',
     totalTime: 'Total Flight Time',
+    launchMass: 'Launch Mass',
+    twr: 'Initial TWR',
+    rodVel: 'Rod Velocity',
+    landVel: 'Landing Velocity',
   },
   mcp: {
     flightConfig: 'Flight Configurations',

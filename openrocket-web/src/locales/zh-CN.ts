@@ -320,6 +320,10 @@ export const zhCN = {
     windDrift: '横向风偏',
     toApogee: '到远地点',
     totalTime: '总飞行时间',
+    launchMass: '起飞质量',
+    twr: '初始推重比',
+    rodVel: '离杆速度',
+    landVel: '着陆速度',
   },
   mcp: {
     flightConfig: '飞行配置',

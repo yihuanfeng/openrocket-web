@@ -59,12 +59,22 @@ export interface FlightProfile {
   velocity: number[];
   acceleration: number[];
   mach: number[];
+  /** 3D 空间轨迹：水平下风位移（X，m，与 time 对齐；无风恒 0）。JS 引擎输出，WASM 可缺省 */
+  trailX?: number[];
+  /** 3D 空间轨迹：水平横风位移（Y，m，与 time 对齐；默认风向沿 X 时恒 0） */
+  trailY?: number[];
+  /** 起飞质量（kg，含发动机） */
+  mass_kg?: number;
+  /** 初始推重比 TWR（起飞推力峰值 / 起飞重力） */
+  twr?: number;
 }
 
 /** 仿真环境条件（P1-5）：地面风速 / 温度 / 气压 */
 export interface SimConditions {
   /** 地面风速（m/s），线性风场近似（全高度恒定，无边界层衰减） */
   windSpeed_ms: number;
+  /** 风向角（度，相对 +X 下风轴，0=沿 X，90=沿 Y；默认 90） */
+  windDir_deg?: number;
   /** 地面温度（°C，ISA 标准 15°C） */
   temperature_C: number;
   /** 地面气压（hPa，标准 1013.25） */

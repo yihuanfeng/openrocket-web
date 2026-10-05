@@ -412,6 +412,7 @@ export class JsEngine implements EngineBridge {
         launchRodVelocity_ms: 0, optimumDelay_s: 0, hasErrors: true, windDrift_m: 0,
         error: e instanceof Error ? e.message : String(e),
         time: [], altitude: [], velocity: [], acceleration: [], mach: [],
+        trailX: [], trailY: [],
       };
     }
   }
@@ -453,7 +454,7 @@ export class JsEngine implements EngineBridge {
 export interface MountedMotor { motor: MotorSpec; ignitionDelay: number; }
 
 const G = 9.80665;
-export const DEFAULT_CONDITIONS: SimConditions = { windSpeed_ms: 0, temperature_C: 15, pressure_hPa: 1013.25 };
+export const DEFAULT_CONDITIONS: SimConditions = { windSpeed_ms: 0, temperature_C: 15, pressure_hPa: 1013.25, windDir_deg: 90 };
 const LAUNCH_ROD = 1.0;
 const PARACHUTE_FACTOR = 30; // 开伞后阻力放大系数（伞 CdA ≈ 体 CdA × 30，量级合理）
 
@@ -468,6 +469,16 @@ function thrustAt(t: number, motor: MotorSpec): number {
     }
   }
   return 0;
+}
+/** 多发动机峰值推力叠加（初始推重比分子：各机各自曲线峰值之和） */
+function maxThrustOf(motors: MountedMotor[]): number {
+  let s = 0;
+  for (const mm of motors) {
+    let peak = 0;
+    for (const f of mm.motor.curve.thrust) if (f > peak) peak = f;
+    s += peak;
+  }
+  return s;
 }
 function tGround(cond: SimConditions): number {
   return 288.15 + ((cond?.temperature_C ?? 15) - 15);
@@ -517,6 +528,7 @@ function simCdA(_model: RocketModel): number {
     }
     for (const ch of c.children ?? []) walk(ch);
   };
+  walk(_model.root);
   // 体阻力（细长体 Cd≈0.45）+ 尾翼摩擦/压差阻力（Cd≈0.02）；表面处理作摩擦系数乘子
   return (0.45 * Math.PI * rMax * rMax + 0.02 * finA) * surf;
 }
@@ -547,6 +559,7 @@ function simulate2dof(model: RocketModel, motors: MountedMotor[], cond: SimCondi
       launchRodVelocity_ms: 0, optimumDelay_s: 0, hasErrors: true, windDrift_m: 0,
       error: '火箭质量无效，无法仿真',
       time: [], altitude: [], velocity: [], acceleration: [], mach: [],
+      trailX: [], trailY: [],
     };
   }
   const cda = simCdA(model);
@@ -588,17 +601,23 @@ function simulate2dof(model: RocketModel, motors: MountedMotor[], cond: SimCondi
   const totalMass = () => mStruct + remMasses.reduce((a, b) => a + b, 0) + (separated ? 0 : sepMass);
 
   let t = 0, z = 0, v = 0;
-  let y = 0, vy = 0; // 3DOF：侧向位移/速度（横风驱动偏航平面，发射杆约束时锁定）
+  let x = 0, vx = 0, y = 0, vy = 0; // 3DOF 水平面：X=下风轴（沿风向分解），Y=横风轴；发射杆约束时锁定
+  // 风向分解：默认 90°（风沿 +Y，兼容旧口径 windDrift=y）；用户可设 windDir_deg 指定风向
+  const wDir = ((cond.windDir_deg ?? 90) % 360) * Math.PI / 180;
+  const windX = wind * Math.cos(wDir);
+  const windY = wind * Math.sin(wDir);
   let m = totalMass();
   let onRod = true;
   let deployed = false;
   let apogee = 0, apogeeT = 0;
   let maxV = 0, maxA = 0, maxMach = 0, rodV = 0, groundV = 0;
   const times: number[] = [], alts: number[] = [], vels: number[] = [], accs: number[] = [], machs: number[] = [];
+  const trailXs: number[] = [], trailYs: number[] = [];
   const pushSample = () => {
     const a = (thrustAtAll(t) - G * m) / m; // 净加速度（不含阻力，供展示）
     times.push(t); alts.push(z); vels.push(v); accs.push(a);
     machs.push(Math.abs(v) / speedOfSound(Math.max(z, 0), cond));
+    trailXs.push(x); trailYs.push(y);
   };
   pushSample();
 
@@ -607,10 +626,9 @@ function simulate2dof(model: RocketModel, motors: MountedMotor[], cond: SimCondi
   while (t < 240 && z >= -0.001) {
     const T = thrustAtAll(t);
     const rho = airDensity(Math.max(z, 0), cond);
-    const dragCoef = deployed ? PARACHUTE_FACTOR : 1;
     // 开伞后：阻力取 基础CdA×30 与 伞CdA 的较大者（伞展开后阻力主导下降段；未设伞参数时保持旧逻辑）
     const cdaEff = deployed ? Math.max(cda * PARACHUTE_FACTOR, chuteCdA) : cda;
-    const D = 0.5 * rho * v * v * cdaEff * dragCoef * (v > 0 ? 1 : -1);
+    const D = 0.5 * rho * v * v * cdaEff * (v > 0 ? 1 : -1);
     const a = (T - G * m - D) / m;
 
     // Heun（改进欧拉）
@@ -618,22 +636,37 @@ function simulate2dof(model: RocketModel, motors: MountedMotor[], cond: SimCondi
     const z1 = Math.max(z + v1 * dt, -0.002);
     const T1 = thrustAtAll(t + dt);
     const rho1 = airDensity(Math.max(z1, 0), cond);
-    const D1 = 0.5 * rho1 * v1 * v1 * cdaEff * dragCoef * (v1 > 0 ? 1 : -1);
+    const D1 = 0.5 * rho1 * v1 * v1 * cdaEff * (v1 > 0 ? 1 : -1);
     const a1 = (T1 - G * m - D1) / m;
     let v2 = v + (a + a1) * 0.5 * dt;
     let z2 = z + (v + v2) * 0.5 * dt;
 
-    // —— 侧向平面：风相对速度 (wind - vy) 驱动气动阻力，使侧向速度趋近风速 ——
-    const Dy = 0.5 * rho * (vy - wind) * Math.abs(vy - wind) * cdaEff * dragCoef;
+    // —— 水平面（3DOF）：两轴分别被风场 (windX, windY) 的阻力驱动，速度趋近当地风 ——
+    // 下降段阻力刚度高（cdaEff 放大 30 倍），大步长 Heun 会超调越过风速导致数值振荡/漂移虚高；
+    // 用 limRel 保证相对风速单步单调衰减、不越过风速。
+    const limRel = (v: number, wind: number, dv: number): number => {
+      const rel = v - wind;
+      return v - Math.sign(rel) * Math.min(Math.abs(dv), Math.abs(rel));
+    };
+    const Dx = 0.5 * rho * (vx - windX) * Math.abs(vx - windX) * cdaEff;
+    const ax = -Dx / m;
+    const vx1 = limRel(vx, windX, ax * dt);
+    const Dx1 = 0.5 * rho1 * (vx1 - windX) * Math.abs(vx1 - windX) * cdaEff;
+    const ax1 = -Dx1 / m;
+    let vx2 = limRel(vx, windX, (ax + ax1) * 0.5 * dt);
+    let x2 = x + (vx + vx2) * 0.5 * dt;
+
+    const Dy = 0.5 * rho * (vy - windY) * Math.abs(vy - windY) * cdaEff;
     const ay = -Dy / m;
-    const vy1 = vy + ay * dt;
-    const Dy1 = 0.5 * rho1 * (vy1 - wind) * Math.abs(vy1 - wind) * cdaEff * dragCoef;
+    const vy1 = limRel(vy, windY, ay * dt);
+    const Dy1 = 0.5 * rho1 * (vy1 - windY) * Math.abs(vy1 - windY) * cdaEff;
     const ay1 = -Dy1 / m;
-    let vy2 = vy + (ay + ay1) * 0.5 * dt;
+    let vy2 = limRel(vy, windY, (ay + ay1) * 0.5 * dt);
     let y2 = y + (vy + vy2) * 0.5 * dt;
 
     if (onRod) {
-      // 发射杆：导轨约束侧向（无漂移）
+      // 发射杆：导轨约束水平面（无漂移）
+      x2 = 0; vx2 = 0;
       y2 = 0; vy2 = 0;
       // 发射杆阶段：不陷入地面（发射台支撑）、速度不反向
       z2 = Math.max(z2, 0);
@@ -667,7 +700,7 @@ function simulate2dof(model: RocketModel, motors: MountedMotor[], cond: SimCondi
       const atDeploy = deployAlt > 0 ? z <= deployAlt : t >= apogeeT;
       if (atDeploy) deployed = true;
     }
-    v = v2; z = z2; vy = vy2; y = y2; t += dt;
+    v = v2; z = z2; vx = vx2; x = x2; vy = vy2; y = y2; t += dt;
     const av = Math.abs(v);
     if (av > maxV) maxV = av;
     if (a > maxA) maxA = a;
@@ -690,10 +723,13 @@ function simulate2dof(model: RocketModel, motors: MountedMotor[], cond: SimCondi
     groundHitVelocity_ms: groundV,
     launchRodVelocity_ms: rodV,
     optimumDelay_s: Math.max(0, apogeeT - burnMain), // 使远地点开伞的最优延迟
-    windDrift_m: y, // 3DOF 侧向位移：横风气动阻力积分的真实漂移
+    windDrift_m: Math.hypot(x, y), // 3DOF 水平漂移：风阻积分的真实漂移
+    mass_kg: a0.mass, // 起飞质量（含发动机，多级为全箭）
+    twr: maxThrustOf(motors) / (a0.mass * G), // 初始推重比（各机峰值推力叠加 / 起飞重力）
     hasErrors: false,
     error: undefined,
     time: times, altitude: alts, velocity: vels, acceleration: accs, mach: machs,
+    trailX: trailXs, trailY: trailYs,
   };
 }
 
