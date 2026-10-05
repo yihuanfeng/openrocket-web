@@ -546,8 +546,8 @@ const mountItems = computed<MountItem[]>(() => {
       outerDiaMM: outerDia,
       motorId, motor,
       ignitionDelay: mc?.ignitionDelay ?? 0,
-      // 直径适配：发动机外径 ≤ 发动机座外径 ×0.92（壁厚余量近似）
-      fitting: allMotors.value.filter((m) => m.diameterMM <= outerDia * 0.92 + 0.001),
+      // 直径适配：发动机直径 ≤ 座径 + 0.5mm 容差（同径可装，跨径档过滤；官方允许大座装小发动机，用适配环）
+      fitting: allMotors.value.filter((m) => m.diameterMM <= outerDia + 0.5),
     };
   });
 });

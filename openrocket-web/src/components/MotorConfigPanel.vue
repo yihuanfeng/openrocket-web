@@ -216,7 +216,7 @@ function onEngFile(e: Event): void {
               :key="m.id"
               :value="m.id"
             >
-              {{ m.name }}（{{ classOf(m) }} · {{ m.totalImpulseNs.toFixed(1) }} N·s · {{ t('sim.delay', { d: m.delay }) }}）
+              {{ m.name }}（{{ diaOf(m) }} · {{ classOf(m) }} · {{ m.totalImpulseNs.toFixed(1) }} N·s · {{ t('sim.delay', { d: m.delay }) }}）
             </option>
           </select>
           <button class="eng-import" @click="engInput?.click()">{{ t('sim.importEng') }}</button>
