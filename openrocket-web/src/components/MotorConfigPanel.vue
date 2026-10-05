@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 发动机配置 Tab：对齐 OpenRocket Motors & Configurations 页
-// 左：飞行配置列表；右：Motor mounts（每座独立选电机 + 移除 + 点火时序）
+// 左：飞行配置列表；右：Motor mounts（每座独立选发动机 + 移除 + 点火时序）
 import { ref, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MotorSpec } from '../lib/engines';
@@ -24,8 +24,7 @@ const props = defineProps<{
   currentConfigId: string;
   motors: MotorSpec[];
   mounts: MountItemData[];
-}>();
-const emit = defineEmits<{
+}>();const emit = defineEmits<{
   switchConfig: [id: string];
   newConfig: [];
   deleteConfig: [];
@@ -65,8 +64,12 @@ function commitRename(c: CfgRow): void {
   if (x) emit('renameConfig', c.id, x);
   renaming.value = null;
 }
+/** 座径文本：0/未知 显示 '—'（官方 .ork 内管无 radius 时继承所在管） */
+function diaText(m: MountItemData): string {
+  return m.outerDiaMM > 0 ? `${m.outerDiaMM.toFixed(0)}mm` : '—';
+}
 
-// —— 选中电机座 ——
+// —— 选中发动机座 ——
 const selectedMount = ref<string | null>(props.mounts[0]?.path ?? null);
 watch(() => props.mounts, (list) => {
   if (list.length === 0) { selectedMount.value = null; return; }
@@ -77,7 +80,7 @@ watch(() => props.mounts, (list) => {
 
 const selectedItem = computed(() => props.mounts.find((m) => m.path === selectedMount.value) ?? null);
 
-/** 电机下拉候选：适配电机 + 当前已选（即使不适配也保留显示） */
+/** 发动机下拉候选：适配发动机 + 当前已选（即使不适配也保留显示） */
 function motorOptions(item: MountItemData): MotorSpec[] {
   const fitIds = new Set(item.fitting.map((m) => m.id));
   const extra = item.motor && !fitIds.has(item.motor.id) ? [item.motor] : [];
@@ -98,7 +101,7 @@ function removeMotor(item: MountItemData): void {
   emit('setMountMotor', item.path, null);
 }
 
-/** 配置摘要：已装电机数 / 首电机名（当前配置即 props.mounts，App 已对齐） */
+/** 配置摘要：已装发动机数 / 首发动机名（当前配置即 props.mounts，App 已对齐） */
 function cfgSummary(): string {
   const cfg = props.mounts;
   const n = cfg.filter((m) => m.motor).length;
@@ -170,7 +173,7 @@ function onEngFile(e: Event): void {
     <section class="mcp-right">
       <div class="mcp-head">
         <span class="mcp-title">{{ t('mcp.mountTitle') }}</span>
-        <span class="mcp-sub">Motor Mounts · per-mount motor</span>
+        <span class="mcp-sub">Motor Mounts · per-mount engine</span>
       </div>
 
       <!-- Motor mounts 列表 -->
@@ -190,7 +193,7 @@ function onEngFile(e: Event): void {
             <span class="mount-check">{{ item.motor ? '■' : '□' }}</span>
             <span class="mount-name">{{ item.compName }}</span>
             <span class="mount-type">{{ item.type === 'innertube' ? t('mcp.innerTube') : t('mcp.bodyTube') }}</span>
-            <span class="mount-dia">{{ item.outerDiaMM.toFixed(0) }}mm</span>
+            <span class="mount-dia">{{ diaText(item) }}</span>
             <span class="mount-motor" :class="{ empty: !item.motor }">
               {{ item.motor ? item.motor.name : t('mcp.noMotor') }}
             </span>
@@ -198,11 +201,11 @@ function onEngFile(e: Event): void {
         </div>
       </div>
 
-      <!-- 选中电机座的配置区 -->
+      <!-- 选中发动机座的配置区 -->
       <div v-if="selectedItem" class="mcp-block">
         <div class="block-title">
           {{ selectedItem.compName }}
-          <span class="block-sub">{{ selectedItem.type === 'innertube' ? t('mcp.innerTube') : t('mcp.bodyTube') }} · {{ t('mcp.mountDia', { d: selectedItem.outerDiaMM.toFixed(0) }) }}</span>
+          <span class="block-sub">{{ selectedItem.type === 'innertube' ? t('mcp.innerTube') : t('mcp.bodyTube') }} · {{ t('mcp.mountDia', { d: diaText(selectedItem) }) }}</span>
         </div>
 
         <div class="motor-pick">
@@ -257,7 +260,7 @@ function onEngFile(e: Event): void {
 </template>
 
 <style scoped>
-.mcp { display: flex; height: 100%; min-height: 0; gap: 0; }
+.mcp { display: flex; width: 100%; height: 100%; min-height: 0; gap: 0; }
 .mcp-left {
   flex: none; border-right: 1px solid var(--border);
   display: flex; flex-direction: column; padding: 14px 14px 10px; min-height: 0; overflow: auto;

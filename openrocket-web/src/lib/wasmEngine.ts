@@ -91,7 +91,7 @@ export class WasmEngine implements EngineBridge {
       };
     }
   }
-  /** 对当前设计跑仿真（阶段 3）：designSimulate → 摘要 + 飞行剖面；WASM 为单电机内置实现，忽略多电机参数 */
+  /** 对当前设计跑仿真（阶段 3）：designSimulate → 摘要 + 飞行剖面；WASM 为单电机内置实现，忽略多发动机参数 */
   async simulate(model: RocketModel, _motors?: import('./jsEngine').MountedMotor[], _cond?: import('./types').SimConditions): Promise<FlightProfile | null> {
     try {
       const teavm = await ensureWasm();

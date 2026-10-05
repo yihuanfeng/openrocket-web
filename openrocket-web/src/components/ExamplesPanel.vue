@@ -38,11 +38,11 @@ const builtin = PRESETS.map((p, i) => {
 /** OpenRocket 官方示例（构成统计来自官方 .ork 实解析；缩略图实时渲染官方文件） */
 const official = reactive(
   [
-    { file: 'A simple model rocket', zh: '简单模型火箭', intro: 'OpenRocket 官方入门示例：头锥 + 机身 + 3 片梯形尾翼 + 降落伞 + 发射导环，配 A8-3 / B6-4 / C6 电机。适合第一支火箭与基础飞行验证。', total: 10, lenM: 405, dia: 25 },
+    { file: 'A simple model rocket', zh: '简单模型火箭', intro: 'OpenRocket 官方入门示例：头锥 + 机身 + 3 片梯形尾翼 + 降落伞 + 发射导环，配 A8-3 / B6-4 / C6 发动机。适合第一支火箭与基础飞行验证。', total: 10, lenM: 405, dia: 25 },
     { file: 'Three stage low power rocket', zh: '三级低功率火箭', intro: '三级串联结构（含自由尾翼组），多级分离设计。适合验证多级分离、级间点火时序与多级重心/压心计算。', total: 23, lenM: 560, dia: 25 },
     { file: 'Two stage high power rocket', zh: '两级高功率火箭', intro: '全库最复杂的构型之一：Sustainer + Booster 双级、Ø102 mm 大直径、隔框/管接头/导轨按钮齐全。适合压力测试大火箭解析与工程级布局。', total: 30, lenM: 2051, dia: 102 },
     { file: 'Parallel booster staging', zh: '并联助推级', intro: '含 parallelstage 并联助推级（侧挂助推、发射后分离）。适合验证并联助推、助推器分离与多级组合仿真。', total: 8, lenM: 1143, dia: 57 },
-    { file: 'Clustered motors', zh: '簇式发动机', intro: '多根内管 + 椭圆尾翼的发动机簇构型，多台电机并联点火。适合测试多电机簇配置与推力叠加。', total: 14, lenM: 705, dia: 55 },
+    { file: 'Clustered motors', zh: '簇式发动机', intro: '多根内管 + 椭圆尾翼的发动机簇构型，多台发动机并联点火。适合测试多发动机簇配置与推力叠加。', total: 14, lenM: 705, dia: 55 },
     { file: 'Dual parachute deployment', zh: '双伞回收', intro: '主伞 + 副伞两级开伞时序（含导轨按钮），回收系统示例。适合验证双伞部署高度配置与回收仿真。', total: 16, lenM: 1477, dia: 57 },
     { file: 'Tube fin rocket', zh: '管尾翼火箭', intro: 'tubefinset 管状尾翼（4 根小管环绕），OpenRocket 少见的管尾翼气动构型。适合管尾翼气动与仿真测试。', total: 7, lenM: 577, dia: 25 },
     { file: 'Pods--airframes and winglets', zh: '捆绑舱（翼面）', intro: 'podset 捆绑舱 + freeformfinset 自由尾翼（翼面）。适合验证侧挂舱 Pods 结构与自由外形尾翼。', total: 14, lenM: 441, dia: 34 },

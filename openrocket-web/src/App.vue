@@ -86,7 +86,7 @@ function startVResize(e: MouseEvent): void {
   window.addEventListener('mouseup', onUp);
 }
 
-// —— 电机座路径定位（发动机配置 Tab 用）——
+// —— 发动机座路径定位（发动机配置 Tab 用）——
 function mountCandidates(root: RocketComponent): RocketComponent[] {
   const out: RocketComponent[] = [];
   const walk = (c: RocketComponent, path: number[]) => {
@@ -165,7 +165,7 @@ function saveAuto(): void {
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
   if (!model.value) return;
   try {
-    // P0-2：飞行配置与自定义电机随设计一起持久化
+    // P0-2：飞行配置与自定义发动机随设计一起持久化
     const payload = {
       model: toRaw(model.value),
       configs: configs.value.map((c) => ({ id: c.id, name: c.name, mounts: c.mounts.map((m) => ({ ...m })) })),
@@ -493,13 +493,13 @@ function addStage(): void {
 const simProfile = ref<FlightProfile | null>(null);
 const simLoading = ref(false);
 const customMotors = ref<MotorSpec[]>([]);
-// —— 飞行配置：命名配置 = 每个电机座独立选电机 + 点火时序（对齐 OpenRocket Motors & Configurations）——
+// —— 飞行配置：命名配置 = 每个发动机座独立选发动机 + 点火时序（对齐 OpenRocket Motors & Configurations）——
 interface MountConfig { path: string; motorId: string | null; ignitionDelay: number; }
 interface FlightConfig { id: string; name: string; mounts: MountConfig[]; }
 const configs = ref<FlightConfig[]>([{ id: 'cfg-default', name: '默认配置', mounts: [] }]);
 const currentConfigId = ref('cfg-default');
 
-/** 补齐配置的电机座条目（模型结构变化后自动对齐：新座补空、失效座保留不删） */
+/** 补齐配置的发动机座条目（模型结构变化后自动对齐：新座补空、失效座保留不删） */
 function ensureMounts(cfg: FlightConfig): void {
   if (!model.value) return;
   const paths = mountCandidates(model.value.root).map((m) => mountPathOf(m));
@@ -520,7 +520,7 @@ const allMotors = computed(() => [...MOTORS, ...customMotors.value]);
 function motorByIdSafe(id: string): MotorSpec | null {
   return allMotors.value.find((m) => m.id === id) ?? null;
 }
-/** 面板数据结构：当前配置 × 当前模型电机座（含直径适配过滤） */
+/** 面板数据结构：当前配置 × 当前模型发动机座（含直径适配过滤） */
 interface MountItem {
   path: string; comp: RocketComponent; name: string; compName: string; type: string;
   outerDiaMM: number; motorId: string | null; motor: MotorSpec | null;
@@ -534,13 +534,19 @@ const mountItems = computed<MountItem[]>(() => {
     const mc = cfg.mounts.find((m) => m.path === path);
     const motorId = mc?.motorId ?? null;
     const motor = motorId ? motorByIdSafe(motorId) : null;
-    const outerDia = Math.max(comp.radius, comp.aftRadius || comp.radius) * 2 * 1000;
+    // 座径：官方 innertube 通常无 <radius>（继承所在管半径），此处向上取父级半径兜底
+    let dia = comp.radius;
+    if (!Number.isFinite(dia)) {
+      const parent = findParent(model.value!.root, comp);
+      if (parent && Number.isFinite(parent.radius)) dia = parent.radius;
+    }
+    const outerDia = (Number.isFinite(dia) ? dia * 2 : 0) * 1000;
     return {
       path, comp, name: comp.name, compName: comp.name, type: comp.type,
       outerDiaMM: outerDia,
       motorId, motor,
       ignitionDelay: mc?.ignitionDelay ?? 0,
-      // 直径适配：电机外径 ≤ 电机座外径 ×0.92（壁厚余量近似）
+      // 直径适配：发动机外径 ≤ 发动机座外径 ×0.92（壁厚余量近似）
       fitting: allMotors.value.filter((m) => m.diameterMM <= outerDia * 0.92 + 0.001),
     };
   });
@@ -555,14 +561,14 @@ function setIgnDelay(path: string, d: number): void {
   const mc = cfg.mounts.find((m) => m.path === path);
   if (mc && Number.isFinite(d) && d >= 0) { mc.ignitionDelay = Math.round(d * 100) / 100; scheduleAutoSave(); }
 }
-/** P1-4：属性面板选电机 → 同步到对应电机座的飞行配置（同一数据通路） */
+/** P1-4：属性面板选发动机 → 同步到对应发动机座的飞行配置（同一数据通路） */
 function onPanelMotorChange(id: string): void {
   if (!model.value || !selected.value) return;
   const path = mountPathOf(selected.value);
-  if (!path) return; // 非电机座组件（如普通 innertube 无 motormount 标记），仅保留属性
+  if (!path) return; // 非发动机座组件（如普通 innertube 无 motormount 标记），仅保留属性
   setMountMotor(path, id || null);
 }
-/** 主电机（当前配置第一个非空电机座）——仿真面板 / 顶部默认展示用 */
+/** 主发动机（当前配置第一个非空发动机座）——仿真面板 / 顶部默认展示用 */
 const primaryMotor = computed<MotorSpec>(() => {
   const cfg = activeConfig();
   for (const mc of cfg.mounts) {
@@ -570,7 +576,7 @@ const primaryMotor = computed<MotorSpec>(() => {
   }
   return motorById(DEFAULT_MOTOR_ID);
 });
-/** 仿真电机序列：每座电机 + 点火时序（跳过未装电机座）；空则回退默认电机 */
+/** 仿真发动机序列：每座发动机 + 点火时序（跳过未装发动机座）；空则回退默认发动机 */
 function mountedMotors(): { motor: MotorSpec; ignitionDelay: number }[] {
   const cfg = activeConfig();
   const out: { motor: MotorSpec; ignitionDelay: number }[] = [];
@@ -621,7 +627,7 @@ function copyConfig(): void {
 }
 // —— P1-5 仿真条件（风/温度/气压）——
 const simConditions = ref<SimConditions>({ ...DEFAULT_CONDITIONS });
-// —— P1-7 多配置对比：同火箭多电机并行仿真，出对比表 ——
+// —— P1-7 多配置对比：同火箭多发动机并行仿真，出对比表 ——
 interface CompareRow { motorId: string; motorName: string; profile: FlightProfile; }
 const compareRows = ref<CompareRow[]>([]);
 const compareLoading = ref(false);
@@ -675,7 +681,7 @@ async function runSimulate(): Promise<void> {
   }
 }
 
-// —— P1-6 延迟优化（异步分片，不阻塞 UI；基于主电机）——
+// —— P1-6 延迟优化（异步分片，不阻塞 UI；基于主发动机）——
 async function runOptimizeDelay() {
   if (!model.value) return;
   delayScanLoading.value = true;
@@ -860,7 +866,7 @@ function loadPresetByName(name: string): void {
 
 async function saveOrk(): Promise<void> {
   if (!model.value) return;
-  // P0-2：飞行配置与自定义电机随 .ork 一起导出（Web 扩展注释，官方可忽略）
+  // P0-2：飞行配置与自定义发动机随 .ork 一起导出（Web 扩展注释，官方可忽略）
   const blob = await modelToOrkBlob(model.value, {
     configs: configs.value.map((c) => ({ id: c.id, name: c.name, mounts: c.mounts.map((m) => ({ ...m })) })),
     customMotors: customMotors.value,
@@ -882,7 +888,7 @@ function applyMotorMeta(m: RocketModel & { webMeta?: OrkWebMeta | null }): void 
     currentConfigId.value = meta.configs[0].id;
     if (meta.customMotors) customMotors.value = meta.customMotors;
   } else {
-    // 旧文件：组件 [meta] motorId → 首个空电机座（官方 OpenRocket 语义：电机座上的电机）
+    // 旧文件：组件 [meta] motorId → 首个空发动机座（官方 OpenRocket 语义：发动机座上的发动机）
     configs.value = [{ id: 'cfg-default', name: '默认配置', mounts: [] }];
     currentConfigId.value = 'cfg-default';
     const firstMount = mountCandidates(m.root)[0];

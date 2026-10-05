@@ -8,7 +8,7 @@ import { JsEngine } from './jsEngine';
 export interface EngineBridge {
   /** 计算整箭质量、CG、CP、稳定性（输入为已解析的火箭模型） */
   analyze(model: RocketModel): Promise<EngineAnalysis>;
-  /** 对当前设计跑仿真，返回飞行剖面；motors = 已装配电机序列（含点火时序），缺省回退 C6-5 */
+  /** 对当前设计跑仿真，返回飞行剖面；motors = 已装配发动机序列（含点火时序），缺省回退 C6-5 */
   simulate(model: RocketModel, motors?: MountedMotor[], cond?: SimConditions): Promise<FlightProfile | null>;
   /** 延迟优化扫描（P1-6）：候选延迟全仿真，返回最优延迟与扫描表（WASM 引擎不支持时抛错） */
   optimizeDelay(model: RocketModel, motor?: MotorSpec, cond?: SimConditions): Promise<DelayScanResult>;

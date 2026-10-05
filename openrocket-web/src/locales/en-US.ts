@@ -348,7 +348,7 @@ export const enUS = {
     autoIgnition: 'Auto (ejection charge ignites next stage)',
     ignNote: 'The Web version supports auto ignition and delay optimization — see the Flight tab.',
     noMotor: 'No motor',
-    mountDia: 'Mount dia {d} mm',
+    mountDia: 'Mount dia {d}',
     unfitted: '{m} ({d}mm) exceeds this mount’s fit diameter; kept for display, simulation still runs.',
     ignDelay: 'Ignition delay',
     ignHint: 'Relative to main-stage ignition (0 = simultaneous; >0 = staged/booster delayed ignition)',

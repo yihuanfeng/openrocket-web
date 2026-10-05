@@ -269,7 +269,7 @@ function compToXml(c: RocketComponent, depth: number): string {
   return lines.join('\n');
 }
 
-/** 飞行配置与自定义电机（Web 扩展，存于 XML 注释，官方 OpenRocket 可忽略） */
+/** 飞行配置与自定义发动机（Web 扩展，存于 XML 注释，官方 OpenRocket 可忽略） */
 export interface OrkWebMeta {
   configs?: { id: string; name: string; mounts: { path: string; motorId: string | null; ignitionDelay: number }[] }[];
   customMotors?: import('./engines').MotorSpec[];
