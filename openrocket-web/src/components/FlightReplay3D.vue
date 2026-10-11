@@ -362,11 +362,11 @@ function drawScenic(ctx: CanvasRenderingContext2D, w: number, h: number): void {
     for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
     ctx.closePath();
     ctx.fillStyle = f4.fill;
-    ctx.globalAlpha = Math.min(1, f4.light);
+    ctx.globalAlpha = 1;
     ctx.fill();
     ctx.globalAlpha = 1;
-    ctx.strokeStyle = 'rgba(30, 60, 120, 0.35)';
-    ctx.lineWidth = 0.6;
+    ctx.strokeStyle = 'rgba(30, 60, 120, 0.10)';
+    ctx.lineWidth = 0.5;
     ctx.stroke();
   }
 
@@ -510,11 +510,11 @@ function drawPanorama(ctx: CanvasRenderingContext2D, w: number, h: number): void
       for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
       ctx.closePath();
       ctx.fillStyle = f4.fill;
-      ctx.globalAlpha = Math.min(1, f4.light);
+      ctx.globalAlpha = 1;
       ctx.fill();
       ctx.globalAlpha = 1;
-      ctx.strokeStyle = 'rgba(10, 40, 100, 0.25)';
-      ctx.lineWidth = 0.7;
+      ctx.strokeStyle = 'rgba(10, 40, 100, 0.08)';
+      ctx.lineWidth = 0.5;
       ctx.stroke();
     }
     const mark = (idx: number, color: string, label: string) => {
