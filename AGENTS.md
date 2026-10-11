@@ -118,6 +118,7 @@ npm run gen:thumbs # 重生成示例缩略图（改 presets/geometry 后必须�
 - **实景渲染死循环修复（2026-10-11）**：`drawScenic` 远山轮廓原用 `for (x=0; x<=w; x+=w/24)`——canvas 隐藏（display:none，clientWidth=0）时步长 0 → 死循环（点击仿真后主线程 BUSY≥24s，经二分定位）；改为固定 24 段 `x=(s/24)*w`；另 `tick()` 加 try/catch 防御（渲染异常自动停止播放）
 - **引擎默认 JS（2026-10-11）**：`engine.ts` 恒 `new JsEngine()`（多电机时序正确性；WASM 单电机局限 + 首次编译慢，默认停用）
 - **回放浮动窗口（2026-10-11）**：新增通用 `FloatingWindow.vue`（标题栏拖动移动、右下角手柄缩放、视口内约束保证手柄可抓、位置/尺寸 localStorage 记忆 `ork:win:*`）；模拟发射「回放」tab 改为显著入口按钮（`sim.openReplay`），点击弹出窗口内嵌 FlightReplay3D（窗口关闭即卸载停止播放）；FlightReplay3D 高度自适应窗口（canvas flex 撑满）
+- **回放三项打磨（2026-10-11）**：① **回放火箭复用 3D 视图真实模型**——新增 `src/lib/rocketFaces3d.ts`（`buildRocketFaces`/`normalizeFaces3D`：部件配色 COLORS3D/光照/尾翼四种轮廓/管翼/并联级，与 RocketView3D 共用同一构建源，RocketView3D 已删本地重复代码改 import）；FlightReplay3D 增 `model` prop（App→SimulationPanel→FlightReplay3D 透传 `model.root`），归一化（z 翻转：模型 z=0 鼻端 → 鼻端在 +Z）后替代原简化几何，无 model 回退简化；② **起飞侧倾修复**：实景相机俯视原固定 0.3 rad（约 17°）→ 画面火箭恒显倾斜；改为高度自适应 `rX = 0.06 + min(1, z/40) * 0.24`（起飞低空近平视约 3.4°，40m 后逐步到约 17°）；③ **时间毫秒**：实景/全景 HUD 与播放条 `toFixed(1)` → `toFixed(3)`（t 0.000s / 36.615s）
 - **多配置对比曲线图**：compare tab 增 ECharts 高度-时间曲线叠加（27 款并行仿真后对比，当前配置高亮；chartC 惰性 init 适配 tab 后挂载容器）
 - **仿真精度修复（2026-10-05，3 个原 bug）**：① simCdA 的 walk 从未调用 → 阻力系数恒 0（纵向/水平阻力从未生效）；② 开伞阻力双重放大（dragCoef=30 × cdaEff=max(cda*30,..)=900 倍 → 终端速度 1.2m/s、降落拖 170s）→ 去掉 dragCoef 重复系数；③ 水平轴 Heun 下降段刚度超调越过风速（漂移虚高 817m）→ limRel 钳制相对风速不越过当地风。修复后 C6-5 入门火箭：远地点 226.6m / 总飞行 36.6s / 风 5m·s⁻¹ 漂移 134m
 - CG/CP 标记 tooltip（2D SVG + 3D Canvas 命中检测）

@@ -1309,6 +1309,7 @@ function stabNote(): string {
             :delay-loading="delayScanLoading"
             :compare-rows="compareRows"
             :compare-loading="compareLoading"
+            :model="model ? model.root : null"
             @motor-import="onMotorImport"
             @motor-change="onSimMotorChange"
             @conditions-change="(c: SimConditions) => (simConditions = c)"

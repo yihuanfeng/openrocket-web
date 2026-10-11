@@ -4,9 +4,10 @@
 //  - 实景（scenic）：电影级发射直播视角 —— 天空渐变/云/太阳、草地发射场、追拍相机（火箭居中、视角跟随速度方位）、
 //    尾焰 + 烟雾粒子（燃烧期由 acceleration 推断）、开伞伞盘+伞绳、实景 HUD
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import type { FlightProfile } from '../lib/types';
+import type { FlightProfile, RocketComponent } from '../lib/types';
+import { buildRocketFaces, normalizeFaces3D } from '../lib/rocketFaces3d';
 
-const props = defineProps<{ profile: FlightProfile | null }>();
+const props = defineProps<{ profile: FlightProfile | null; model?: RocketComponent | null }>();
 
 const canvas = ref<HTMLCanvasElement | null>(null);
 const playing = ref(false);
@@ -60,6 +61,28 @@ function rocketFaces(): Face[] {
   return faces;
 }
 const ROCKET_FACES = rocketFaces();
+
+/** 真实模型三角面（复用 RocketView3D 同一构建源：部件配色/外形/尾翼轮廓/并联级），
+ *  归一化到 ROCKET_LEN 长度并翻转轴向（模型 z=0 为鼻端 → 鼻端在 +Z 与简化几何一致）；
+ *  无 model 时回退简化几何 */
+const modelFaces = ref<Face[] | null>(null);
+function rebuildModel(): void {
+  const root = props.model;
+  if (!root) {
+    modelFaces.value = null;
+    return;
+  }
+  const tris = buildRocketFaces(root, null);
+  modelFaces.value = normalizeFaces3D(tris, ROCKET_LEN).map((t) => ({
+    p: t.pts.map(([x, y, z]) => ({ x, y, z })),
+    fill: t.color,
+    light: 1,
+  }));
+}
+watch(() => props.model, rebuildModel, { immediate: true });
+function rocketFacesNow(): Face[] {
+  return modelFaces.value ?? ROCKET_FACES;
+}
 
 /** 局部 +Z 长轴旋转到 dir 方向（先绕 Y pitch，再绕 Z yaw） */
 function orient(faces: Face[], dir: { x: number; y: number; z: number }): Face[] {
@@ -226,10 +249,10 @@ function drawScenic(ctx: CanvasRenderingContext2D, w: number, h: number): void {
   const dvz = p.velocity[iF] ?? 0;
   const deployed = tCur >= p.timeToApogee_s && zNow.value < p.maxAltitude_m * 0.99 && p.altitude[N - 1] < p.maxAltitude_m;
 
-  // 相机：视角跟随速度水平方位（追拍），固定微俯视；实景禁用拖拽旋转
+  // 相机：视角跟随速度水平方位（追拍）；俯视随高度渐变——起飞低空近平视（真实发射直播感），高空逐步俯视
   const yaw = Math.atan2(dvy, dvx);
   rotY += (yaw - rotY) * 0.12;
-  const rY = rotY, rX = 0.3;
+  const rY = rotY, rX = 0.06 + Math.min(1, zNow.value / 40) * 0.24;
   const cP = Math.cos(rX), sP = Math.sin(rX);
   // 以火箭为中心：世界点 - 火箭位置
   const unit = Math.min(w, h) * 0.46;
@@ -296,7 +319,7 @@ function drawScenic(ctx: CanvasRenderingContext2D, w: number, h: number): void {
 
   // 火箭
   const faces: Face[] = [];
-  const oriented = orient(ROCKET_FACES, { x: dvx, y: dvy, z: dvz });
+  const oriented = orient(rocketFacesNow(), { x: dvx, y: dvy, z: dvz });
   for (const f2 of oriented) {
     faces.push({ p: f2.p.map((q) => ({ x: q.x + xCur, y: q.y + yCur, z: q.z + zNow.value })), fill: f2.fill, light: f2.light });
   }
@@ -356,7 +379,7 @@ function drawScenic(ctx: CanvasRenderingContext2D, w: number, h: number): void {
   ctx.font = '12px -apple-system, sans-serif';
   ctx.fillStyle = '#b8d8f5';
   ctx.fillText(`速度 ${vNow.value.toFixed(1)} m/s`, w - 22, 50);
-  ctx.fillText(`t ${tCur.toFixed(1)}s · 漂移 ${hDist.toFixed(1)}m`, w - 22, 70);
+  ctx.fillText(`t ${tCur.toFixed(3)}s · 漂移 ${hDist.toFixed(1)}m`, w - 22, 70);
   const state = zNow.value <= 0 ? '地面' : deployed ? '伞降中' : tCur < p.timeToApogee_s ? '上升' : '滑行';
   ctx.textAlign = 'left';
   ctx.fillStyle = '#fff';
@@ -459,7 +482,7 @@ function drawPanorama(ctx: CanvasRenderingContext2D, w: number, h: number): void
     const dvz = p.velocity[iF] ?? 0;
     const deployed = tCur >= p.timeToApogee_s && zNow.value < p.maxAltitude_m * 0.99 && p.altitude[N - 1] < p.maxAltitude_m;
     const faces: Face[] = [];
-    const oriented = orient(ROCKET_FACES, { x: dvx, y: dvy, z: dvz });
+    const oriented = orient(rocketFacesNow(), { x: dvx, y: dvy, z: dvz });
     for (const f2 of oriented) {
       faces.push({ p: f2.p.map((q) => ({ x: q.x + xCur, y: q.y + yCur, z: q.z + zNow.value })), fill: f2.fill, light: f2.light });
     }
@@ -501,13 +524,13 @@ function drawPanorama(ctx: CanvasRenderingContext2D, w: number, h: number): void
     };
     let apI = 0;
     for (let i = 1; i < N; i++) if (p.altitude[i] > p.altitude[apI]) apI = i;
-    mark(apI, '#ff7a00', `远地点 ${p.maxAltitude_m.toFixed(0)} m（t=${p.timeToApogee_s.toFixed(1)}s）`);
-    mark(N - 1, '#22c55e', `着陆（t=${tMax.toFixed(1)}s）`);
+    mark(apI, '#ff7a00', `远地点 ${p.maxAltitude_m.toFixed(0)} m（t=${p.timeToApogee_s.toFixed(3)}s）`);
+    mark(N - 1, '#22c55e', `着陆（t=${tMax.toFixed(3)}s）`);
     const hDist = Math.hypot(xCur, yCur);
     ctx.fillStyle = '#e2e8f0';
     ctx.font = '600 12px -apple-system, sans-serif';
     ctx.textAlign = 'right';
-    ctx.fillText(`t=${tCur.toFixed(1)}s  高度=${zNow.value.toFixed(0)}m  速度=${vNow.value.toFixed(1)}m/s  漂移=${hDist.toFixed(1)}m`, w - 12, 20);
+    ctx.fillText(`t=${tCur.toFixed(3)}s  高度=${zNow.value.toFixed(0)}m  速度=${vNow.value.toFixed(1)}m/s  漂移=${hDist.toFixed(1)}m`, w - 12, 20);
     const state = zNow.value <= 0 ? '地面' : deployed ? '伞降' : tCur < p.timeToApogee_s ? '上升' : '滑行';
     ctx.textAlign = 'left';
     ctx.fillStyle = deployed ? '#ff7a00' : '#38bdf8';
@@ -635,7 +658,7 @@ watch(() => props.profile, () => { reset(); }, { deep: false });
         :disabled="!profile || profile.time.length < 2"
         @input="draw()"
       />
-      <span class="rtime">{{ (progress * (profile ? profile.time[profile.time.length - 1] : 0)).toFixed(1) }}s / {{ (profile ? profile.time[profile.time.length - 1] : 0).toFixed(1) }}s</span>
+      <span class="rtime">{{ (progress * (profile ? profile.time[profile.time.length - 1] : 0)).toFixed(3) }}s / {{ (profile ? profile.time[profile.time.length - 1] : 0).toFixed(3) }}s</span>
     </div>
     <div class="hint">{{ mode === 'scenic' ? '实景飞行：视角跟随火箭，尾焰/烟雾/开伞实时呈现' : '3D 空间轨迹回放（3DOF 口径：高度 + 风致漂移）· 拖拽旋转视角 · 滚轮缩放' }}</div>
   </div>

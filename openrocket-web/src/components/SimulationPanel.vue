@@ -7,7 +7,7 @@ import { LineChart } from 'echarts/charts';
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import type { ECharts } from 'echarts/core';
-import type { DelayScanResult, FlightProfile, SimConditions } from '../lib/types';
+import type { DelayScanResult, FlightProfile, RocketComponent, SimConditions } from '../lib/types';
 import type { MotorSpec } from '../lib/engines';
 import FlightReplay3D from './FlightReplay3D.vue';
 import FloatingWindow from './FloatingWindow.vue';
@@ -26,6 +26,7 @@ const props = defineProps<{
   delayLoading: boolean;
   compareRows: Array<{ motorId: string; motorName: string; profile: FlightProfile }>;
   compareLoading: boolean;
+  model?: RocketComponent | null;
 }>();
 const emit = defineEmits<{
   motorChange: [m: MotorSpec];
@@ -355,7 +356,7 @@ function onEngFile(e: Event) {
     <div v-else-if="loading" class="empty">{{ t('sim.running') }}</div>
     <div v-else class="empty">{{ t('sim.notRun') }}</div>
     <FloatingWindow v-if="replayOpen && profile" title="飞行回放" store-key="replay" @close="replayOpen = false">
-      <FlightReplay3D :profile="profile" />
+      <FlightReplay3D :profile="profile" :model="props.model ?? null" />
     </FloatingWindow>
   </div>
 </template>
