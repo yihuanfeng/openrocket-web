@@ -2,7 +2,6 @@
 import type { DelayScanResult, EngineAnalysis, FlightProfile, RocketModel, SimConditions } from './types';
 import type { MotorSpec } from './engines';
 import type { MountedMotor } from './jsEngine';
-import { WasmEngine } from './wasmEngine';
 import { JsEngine } from './jsEngine';
 
 export interface EngineBridge {
@@ -59,7 +58,8 @@ export function engineDiag(): EngineDiag {
 
 /** 检测浏览器是否支持 WebAssembly GC（TeaVM wasmGC 产物必需）——当前逻辑并入 engineDiag() */
 
-let current: EngineBridge = engineDiag().supported ? new WasmEngine() : new JsEngine();
+// 默认 JS 引擎（多电机时序仿真、功能完整、无编译延迟；WASM 为历史备选：单电机 + 首次编译慢，且不支持延迟优化）
+let current: EngineBridge = new JsEngine();
 
 export function setEngineBridge(bridge: EngineBridge): void {
   current = bridge;

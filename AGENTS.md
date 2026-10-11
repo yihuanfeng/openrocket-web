@@ -49,7 +49,7 @@
 - `jsEngine.ts` — **多电机时序仿真**：`simulate(model, MountedMotor[], cond)`，`MountedMotor { motor, ignitionDelay }`；同时点火推力叠加、推进剂各自消耗，主级 = 第一台；WASM 引擎仍为单电机忽略多机参数。
 - **持久化（2026-10-05）**：autosave `ork:autosave:v1` 存 `{ model, configs, customMotors }`（兼容旧裸 model 存档）；.ork 导出经 `modelToOrkBlob(model, meta)` 写入 XML 注释 `<!--ork-web:...-->`（`--` 转义为 `\u002d`），`parseOrkWebMeta()`/`orkParser` 读回挂 `model.webMeta`，`applyMotorMeta()` 恢复配置或回退同步组件属性 motorId。
 - `orkParser.ts` — 解析官方 .ork（ZIP，内部 JSZip 解压，node 环境需注入 `@xmldom/xmldom` 的 DOMParser）。
-- `jsEngine.ts` / `wasmEngine.ts` — 仿真引擎（JS 为主；wasm 为备选，浏览器不支持 WebAssembly GC 时自动降级）。
+- `jsEngine.ts` / `wasmEngine.ts` — 仿真引擎（**恒 JS 引擎为主**：多电机时序仿真、功能完整、无编译延迟；WASM 为历史备选——单电机、首次编译慢、不支持延迟优化，已默认停用）。
 - `designSerializer.ts` — RocketModel → 官方 design 动作序列。
 - `orkSerializer.ts` / `rktParser.ts` — .ork 序列化（含 Web 扩展 meta）/ Rocksim .rkt 解析。
 - `materials.ts` — 材料数据（密度等）。
@@ -114,6 +114,9 @@ npm run gen:thumbs # 重生成示例缩略图（改 presets/geometry 后必须�
 - 3D 部件程序化材质纹理（碳纤维/拉丝/玻纤/布料）
 - **仿真 3DOF 轨迹输出（2026-10-05）**：SimConditions 增风向 `windDir_deg`（默认 90° 沿 Y）；双水平轴（X 下风/Y 横风）积分，FlightProfile 输出 `trailX/trailY`（与 time 对齐）+ `mass_kg`/`twr`（起飞质量/初始推重比）
 - **3D 空间飞行回放（FlightReplay3D 重写）**：真实空间轨迹曲线 + 地面投影 + 发射台 + 火箭沿轨迹移动、姿态跟随速度矢量 + 开伞伞盘 + 远地点/着陆事件 + 实时 HUD + 双轴相机；无 trail 数据回退垂直路径
+- **实景飞行回放（2026-10-11，FlightReplay3D 双模式）**：新增实景模式（默认）——天空渐变/太阳光晕/7 朵漂移程序化云/远山剪影/草地发射场、追拍相机（rotY 跟随速度方位角、固定俯视 0.3、实景禁用拖拽缩放）、尾焰橙+白烟粒子（上限 320，燃烧期由 acceleration 推断 `burnEndOf`）、开伞伞盘 8 边形+伞绳、实景 HUD（高度/速度/t/漂移/状态）；全景模式保留原样；两模式右上角切换按钮
+- **实景渲染死循环修复（2026-10-11）**：`drawScenic` 远山轮廓原用 `for (x=0; x<=w; x+=w/24)`——canvas 隐藏（display:none，clientWidth=0）时步长 0 → 死循环（点击仿真后主线程 BUSY≥24s，经二分定位）；改为固定 24 段 `x=(s/24)*w`；另 `tick()` 加 try/catch 防御（渲染异常自动停止播放）
+- **引擎默认 JS（2026-10-11）**：`engine.ts` 恒 `new JsEngine()`（多电机时序正确性；WASM 单电机局限 + 首次编译慢，默认停用）
 - **多配置对比曲线图**：compare tab 增 ECharts 高度-时间曲线叠加（27 款并行仿真后对比，当前配置高亮；chartC 惰性 init 适配 tab 后挂载容器）
 - **仿真精度修复（2026-10-05，3 个原 bug）**：① simCdA 的 walk 从未调用 → 阻力系数恒 0（纵向/水平阻力从未生效）；② 开伞阻力双重放大（dragCoef=30 × cdaEff=max(cda*30,..)=900 倍 → 终端速度 1.2m/s、降落拖 170s）→ 去掉 dragCoef 重复系数；③ 水平轴 Heun 下降段刚度超调越过风速（漂移虚高 817m）→ limRel 钳制相对风速不越过当地风。修复后 C6-5 入门火箭：远地点 226.6m / 总飞行 36.6s / 风 5m·s⁻¹ 漂移 134m
 - CG/CP 标记 tooltip（2D SVG + 3D Canvas 命中检测）
