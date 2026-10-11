@@ -26,6 +26,7 @@ let lastTs = 0;
 let dragging = false;
 let lastX = 0;
 let lastY = 0;
+let manualView = false; // 实景追拍：用户拖拽后切手动视角；再次播放恢复追拍
 let ro: ResizeObserver | null = null;
 
 // —— 简化火箭几何（局部坐标：长轴沿 +Z，鼻锥在 +Z 端） ——
@@ -174,7 +175,7 @@ const CLOUDS = Array.from({ length: 7 }, (_, i) => ({
 
 function drawScenic(ctx: CanvasRenderingContext2D, w: number, h: number): void {
   const p = props.profile;
-  const cxp = w / 2, cyp = h * 0.55;
+  const cxp = w / 2;
   // 天空：垂直渐变（地平线暖白 → 高空深蓝）
   const sky = ctx.createLinearGradient(0, 0, 0, h * 0.62);
   sky.addColorStop(0, '#0e2b63');
@@ -253,13 +254,18 @@ function drawScenic(ctx: CanvasRenderingContext2D, w: number, h: number): void {
   const deployed = tCur >= p.timeToApogee_s && zNow.value < p.maxAltitude_m * 0.99 && p.altitude[N - 1] < p.maxAltitude_m;
 
   // 相机：视角跟随速度水平方位（追拍）；俯视随高度渐变——起飞低空近平视（真实发射直播感），高空逐步俯视
-  // 起飞瞬间与速度方位直接对齐（初始 rotY 未跟随前不做缓动，避免火箭呈固定倾斜角），之后平滑跟随
+  // 用户拖拽（manualView）时保持手动偏航，不自动追拍；再次播放恢复
   const yaw = Math.atan2(dvy, dvx);
-  if (rotYUnset) { rotY = yaw; rotYUnset = false; } else rotY += (yaw - rotY) * 0.12;
-  const rY = rotY, rX = 0.06 + Math.min(1, zNow.value / 40) * 0.24;
+  if (rotYUnset) { rotY = yaw; rotYUnset = false; }
+  else if (!manualView) rotY += (yaw - rotY) * 0.12;
+  const rY = rotY;
+  // 俯仰运镜：起飞前/低空相机高空俯瞰（rX≈0.98≈56°，在火箭斜上方俯视发射台全场），
+  // 随高度指数衰减转为近距离追拍（rX≈0.1-0.3），形成"俯瞰开场 → 追拍跟进"镜头语言
+  const rX = 0.08 + 0.9 * Math.exp(-zNow.value / 25) + Math.min(1, zNow.value / 100) * 0.2;
   const cP = Math.cos(rX), sP = Math.sin(rX);
-  // 以火箭为中心：世界点 - 火箭位置
-  const unit = Math.min(w, h) * 0.46;
+  // 以火箭为中心；火箭画面纵向位置：低空在下方（0.64h）→ 高空升至中心（0.50h），"跟随上升"运镜
+  const cypDyn = h * (0.64 - 0.14 * Math.min(1, zNow.value / 70));
+  const unit = Math.min(w, h) * 0.58 * scale;
   const proj = (x: number, y: number, z: number) => {
     const rx = x - xCur, ry = y - yCur, rz = z - zNow.value;
     const cY = Math.cos(rY), sY = Math.sin(rY);
@@ -267,7 +273,7 @@ function drawScenic(ctx: CanvasRenderingContext2D, w: number, h: number): void {
     const y1 = rx * sY + ry * cY;
     const y2 = y1 * cP - rz * sP;
     const z2 = y1 * sP + rz * cP;
-    return { x: cxp + x1 * unit, y: cyp - z2 * unit, depth: y2, scale: 1 / (1 + Math.max(0, z2) * 0.02) };
+    return { x: cxp + x1 * unit, y: cypDyn - z2 * unit, depth: y2, scale: 1 / (1 + Math.max(0, z2) * 0.02) };
   };
 
   // 发射场（火箭相对原点，地面）：距离较近时显示
@@ -398,14 +404,14 @@ function drawPanorama(ctx: CanvasRenderingContext2D, w: number, h: number): void
   const p = props.profile;
   ctx.fillStyle = '#0b1630';
   ctx.fillRect(0, 0, w, h);
-  const cxp = w / 2, cyp = h * 0.48;
+  const cxp = w / 2, cyp = h * 0.64;
   const maxZ = p && p.maxAltitude_m > 0 ? p.maxAltitude_m : 30;
   let hSpan = 1;
   if (p && p.trailX && p.trailY) {
     for (let i = 0; i < p.trailX.length; i++) hSpan = Math.max(hSpan, Math.abs(p.trailX[i] ?? 0), Math.abs(p.trailY[i] ?? 0));
   }
-  const sceneMax = Math.max(maxZ * 0.55, hSpan * 0.75, 6);
-  const unit = Math.min(w, h) * 0.38 * scale / Math.max(sceneMax, 0.001);
+  const sceneMax = Math.max(maxZ * 0.62, hSpan * 0.75, 6);
+  const unit = Math.min(w, h) * 0.30 * scale / Math.max(sceneMax, 0.001);
   const proj = (x: number, y: number, z: number) => {
     const cY = Math.cos(rotY), sY = Math.sin(rotY);
     const cP = Math.cos(rotX), sP = Math.sin(rotX);
@@ -417,8 +423,8 @@ function drawPanorama(ctx: CanvasRenderingContext2D, w: number, h: number): void
   };
   const gridN = 7;
   ctx.lineWidth = 1;
-  ctx.strokeStyle = 'rgba(96, 165, 250, 0.10)';
-  const gMax = Math.max(hSpan * 1.6, 5);
+  ctx.strokeStyle = 'rgba(96, 165, 250, 0.18)';
+  const gMax = Math.max(hSpan * 1.6, maxZ * 0.4, 30);
   for (let i = -gridN; i <= gridN; i++) {
     const g = (i / gridN) * gMax;
     const a = proj(g, -gMax, 0), b = proj(g, gMax, 0);
@@ -426,17 +432,17 @@ function drawPanorama(ctx: CanvasRenderingContext2D, w: number, h: number): void
     const c = proj(-gMax, g, 0), d = proj(gMax, g, 0);
     ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(d.x, d.y); ctx.stroke();
   }
-  ctx.strokeStyle = 'rgba(96, 165, 250, 0.45)';
+  ctx.strokeStyle = 'rgba(96, 165, 250, 0.6)';
   ctx.lineWidth = 1.5;
   const gA = proj(-gMax, -gMax, 0), gB = proj(gMax, -gMax, 0), gC = proj(gMax, gMax, 0), gD = proj(-gMax, gMax, 0);
   ctx.beginPath(); ctx.moveTo(gA.x, gA.y); ctx.lineTo(gB.x, gB.y); ctx.lineTo(gC.x, gC.y); ctx.lineTo(gD.x, gD.y); ctx.closePath(); ctx.stroke();
-  const padR = Math.max(0.5, Math.min(2, hSpan * 0.2));
-  ctx.fillStyle = 'rgba(148, 163, 184, 0.35)';
+  const padR = Math.max(1.2, Math.min(3, hSpan * 0.3));
+  ctx.fillStyle = 'rgba(148, 163, 184, 0.55)';
   const padPts = [proj(-padR, -padR, 0), proj(padR, -padR, 0), proj(padR, padR, 0), proj(-padR, padR, 0)];
   ctx.beginPath(); ctx.moveTo(padPts[0].x, padPts[0].y);
   for (let i = 1; i < padPts.length; i++) ctx.lineTo(padPts[i].x, padPts[i].y);
   ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#64748b';
+  ctx.fillStyle = 'rgba(148, 163, 184, 0.9)';
   ctx.font = '10px -apple-system, sans-serif';
   ctx.textAlign = 'left';
   const zSteps = Math.min(8, Math.ceil(maxZ / 10));
@@ -454,8 +460,8 @@ function drawPanorama(ctx: CanvasRenderingContext2D, w: number, h: number): void
     const tx = p.trailX ?? [];
     const ty = p.trailY ?? [];
     const hasTrail = tx.length === N;
-    ctx.lineWidth = 1.4;
-    ctx.strokeStyle = 'rgba(56, 130, 246, 0.35)';
+    ctx.lineWidth = 1.6;
+    ctx.strokeStyle = 'rgba(96, 180, 255, 0.75)';
     ctx.beginPath();
     for (let i = 0; i < N; i++) {
       const pt = proj(hasTrail ? (tx[i] ?? 0) : 0, hasTrail ? (ty[i] ?? 0) : 0, p.altitude[i]);
@@ -463,7 +469,7 @@ function drawPanorama(ctx: CanvasRenderingContext2D, w: number, h: number): void
     }
     ctx.stroke();
     ctx.setLineDash([4, 4]);
-    ctx.strokeStyle = 'rgba(96, 165, 250, 0.25)';
+    ctx.strokeStyle = 'rgba(96, 165, 250, 0.45)';
     ctx.beginPath();
     for (let i = 0; i < N; i++) {
       const pt = proj(hasTrail ? (tx[i] ?? 0) : 0, hasTrail ? (ty[i] ?? 0) : 0, 0);
@@ -486,16 +492,19 @@ function drawPanorama(ctx: CanvasRenderingContext2D, w: number, h: number): void
     const dvz = p.velocity[iF] ?? 0;
     const deployed = tCur >= p.timeToApogee_s && zNow.value < p.maxAltitude_m * 0.99 && p.altitude[N - 1] < p.maxAltitude_m;
     const faces: Face[] = [];
+    // 全景：火箭按真实比例在场景里不足 1px（unit≈1.6px/m，0.42m→0.7px）不可见，
+    // 独立放大到画面约 40px，位置仍锚定轨迹点；伞盘随火箭同比例放大
+    const rs = Math.max(0.01, 40 / Math.max(ROCKET_LEN * unit, 1e-6));
     const oriented = orient(rocketFacesNow(), { x: dvx, y: dvy, z: dvz });
     for (const f2 of oriented) {
-      faces.push({ p: f2.p.map((q) => ({ x: q.x + xCur, y: q.y + yCur, z: q.z + zNow.value })), fill: f2.fill, light: f2.light });
+      faces.push({ p: f2.p.map((q) => ({ x: q.x * rs + xCur, y: q.y * rs + yCur, z: q.z * rs + zNow.value })), fill: f2.fill, light: f2.light });
     }
     if (deployed) {
-      const R = 0.055;
+      const R = 0.055 * rs;
       const canopy: Face[] = [];
       for (let i = 0; i < 8; i++) {
         const a0 = (i / 8) * Math.PI * 2, a1 = ((i + 1) / 8) * Math.PI * 2;
-        canopy.push({ p: [{ x: 0, y: 0, z: ROCKET_LEN * 1.6 }, { x: R * Math.cos(a0), y: R * Math.sin(a0), z: ROCKET_LEN * 1.6 }, { x: R * Math.cos(a1), y: R * Math.sin(a1), z: ROCKET_LEN * 1.6 }], fill: '#ff7a00', light: 0.9 });
+        canopy.push({ p: [{ x: 0, y: 0, z: ROCKET_LEN * 1.6 * rs }, { x: R * Math.cos(a0), y: R * Math.sin(a0), z: ROCKET_LEN * 1.6 * rs }, { x: R * Math.cos(a1), y: R * Math.sin(a1), z: ROCKET_LEN * 1.6 * rs }], fill: '#ff7a00', light: 0.9 });
       }
       const oCanopy = orient(canopy, { x: dvx, y: dvy, z: dvz });
       for (const f3 of oCanopy) {
@@ -589,6 +598,7 @@ function togglePlay(): void {
   lastTs = 0;
   if (playing.value) {
     rotYUnset = true; // 每次开始播放先与当前速度方位对齐，避免承接旧偏航导致起飞斜飞
+    manualView = false; // 播放恢复实景追拍（用户在拖拽中的手动视角被重置）
     raf = requestAnimationFrame(tick);
   }
 }
@@ -601,8 +611,8 @@ function reset(): void {
 }
 
 function onDown(e: MouseEvent): void {
-  if (mode.value !== 'panorama') return;
   dragging = true; lastX = e.clientX; lastY = e.clientY;
+  if (mode.value === 'scenic') manualView = true; // 实景拖拽 → 切手动视角（暂停自动追拍）
 }
 function onMove(e: MouseEvent): void {
   if (!dragging) return;
@@ -614,7 +624,6 @@ function onMove(e: MouseEvent): void {
 }
 function onUp(): void { dragging = false; }
 function onWheel(e: WheelEvent): void {
-  if (mode.value !== 'panorama') return;
   e.preventDefault();
   scale *= e.deltaY > 0 ? 0.88 : 1.12;
   scale = Math.min(4, Math.max(0.3, scale));
