@@ -10,10 +10,12 @@ import type { ECharts } from 'echarts/core';
 import type { DelayScanResult, FlightProfile, SimConditions } from '../lib/types';
 import type { MotorSpec } from '../lib/engines';
 import FlightReplay3D from './FlightReplay3D.vue';
+import FloatingWindow from './FloatingWindow.vue';
 
 echarts.use([LineChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
 
 const { t } = useI18n();
+const replayOpen = ref(false);
 const props = defineProps<{
   profile: FlightProfile | null;
   loading: boolean;
@@ -341,11 +343,20 @@ function onEngFile(e: Event) {
       <div v-show="tab === 'alt'" ref="chartA" class="chart"></div>
       <div v-show="tab === 'acc'" ref="chartB" class="chart"></div>
       <div v-show="tab === 'replay'">
-        <FlightReplay3D :profile="profile" />
+        <div class="replay-launch">
+          <button class="replay-open-btn" @click="replayOpen = true">
+            <span class="ro-icon">▶</span>
+            <span class="ro-text">{{ t('sim.openReplay') }}</span>
+          </button>
+          <p class="ro-hint">{{ t('sim.replayHint') }}</p>
+        </div>
       </div>
     </div>
     <div v-else-if="loading" class="empty">{{ t('sim.running') }}</div>
     <div v-else class="empty">{{ t('sim.notRun') }}</div>
+    <FloatingWindow v-if="replayOpen && profile" title="飞行回放" store-key="replay" @close="replayOpen = false">
+      <FlightReplay3D :profile="profile" />
+    </FloatingWindow>
   </div>
 </template>
 
@@ -380,6 +391,20 @@ function onEngFile(e: Event) {
 .compare-table tbody tr:hover { background: var(--gray-50, #f5f6f8); }
 .compare-table tbody tr.on { background: var(--blue-100, #e8f2ff); font-weight: 600; }
 .compare-table td.cmp-name { text-align: left; font-weight: 600; }
+.replay-launch {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 28px 16px; border: 1px dashed var(--blue-400, #4f8fff);
+  background: linear-gradient(180deg, rgba(31, 111, 255, 0.08), rgba(31, 111, 255, 0.02));
+}
+.replay-open-btn {
+  display: inline-flex; align-items: center; gap: 10px;
+  font: inherit; font-size: 15px; font-weight: 700; color: #fff;
+  background: var(--blue-600, #1260e0); border: none; border-radius: 0;
+  padding: 14px 36px; cursor: pointer; box-shadow: 0 4px 16px rgba(18, 96, 224, 0.35);
+}
+.replay-open-btn:hover { background: var(--blue-700, #0b4fc0); }
+.ro-icon { font-size: 15px; }
+.ro-hint { margin: 0; font-size: 11px; color: var(--text-3); text-align: center; line-height: 1.5; }
 .sim-pane { background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 12px 14px; }
 .pane-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .pane-title { font-size: 12px; color: var(--text-2); font-weight: 600; }

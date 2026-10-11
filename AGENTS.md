@@ -117,6 +117,7 @@ npm run gen:thumbs # 重生成示例缩略图（改 presets/geometry 后必须�
 - **实景飞行回放（2026-10-11，FlightReplay3D 双模式）**：新增实景模式（默认）——天空渐变/太阳光晕/7 朵漂移程序化云/远山剪影/草地发射场、追拍相机（rotY 跟随速度方位角、固定俯视 0.3、实景禁用拖拽缩放）、尾焰橙+白烟粒子（上限 320，燃烧期由 acceleration 推断 `burnEndOf`）、开伞伞盘 8 边形+伞绳、实景 HUD（高度/速度/t/漂移/状态）；全景模式保留原样；两模式右上角切换按钮
 - **实景渲染死循环修复（2026-10-11）**：`drawScenic` 远山轮廓原用 `for (x=0; x<=w; x+=w/24)`——canvas 隐藏（display:none，clientWidth=0）时步长 0 → 死循环（点击仿真后主线程 BUSY≥24s，经二分定位）；改为固定 24 段 `x=(s/24)*w`；另 `tick()` 加 try/catch 防御（渲染异常自动停止播放）
 - **引擎默认 JS（2026-10-11）**：`engine.ts` 恒 `new JsEngine()`（多电机时序正确性；WASM 单电机局限 + 首次编译慢，默认停用）
+- **回放浮动窗口（2026-10-11）**：新增通用 `FloatingWindow.vue`（标题栏拖动移动、右下角手柄缩放、视口内约束保证手柄可抓、位置/尺寸 localStorage 记忆 `ork:win:*`）；模拟发射「回放」tab 改为显著入口按钮（`sim.openReplay`），点击弹出窗口内嵌 FlightReplay3D（窗口关闭即卸载停止播放）；FlightReplay3D 高度自适应窗口（canvas flex 撑满）
 - **多配置对比曲线图**：compare tab 增 ECharts 高度-时间曲线叠加（27 款并行仿真后对比，当前配置高亮；chartC 惰性 init 适配 tab 后挂载容器）
 - **仿真精度修复（2026-10-05，3 个原 bug）**：① simCdA 的 walk 从未调用 → 阻力系数恒 0（纵向/水平阻力从未生效）；② 开伞阻力双重放大（dragCoef=30 × cdaEff=max(cda*30,..)=900 倍 → 终端速度 1.2m/s、降落拖 170s）→ 去掉 dragCoef 重复系数；③ 水平轴 Heun 下降段刚度超调越过风速（漂移虚高 817m）→ limRel 钳制相对风速不越过当地风。修复后 C6-5 入门火箭：远地点 226.6m / 总飞行 36.6s / 风 5m·s⁻¹ 漂移 134m
 - CG/CP 标记 tooltip（2D SVG + 3D Canvas 命中检测）

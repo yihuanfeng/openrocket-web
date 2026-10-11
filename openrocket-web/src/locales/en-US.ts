@@ -293,6 +293,8 @@ export const enUS = {
     tabAlt: 'Altitude · Velocity',
     tabAcc: 'Acceleration · Mach',
     tabReplay: 'Replay',
+    openReplay: 'Open Replay Window',
+    replayHint: 'Scenic / panoramic flight replay · draggable & resizable window · exhaust, smoke, parachute, 3D trajectory in real time',
     tabCompare: 'Multi-Motor Compare',
     motor: 'Motor',
     delay: '{d}s delay',

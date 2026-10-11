@@ -642,8 +642,8 @@ watch(() => props.profile, () => { reset(); }, { deep: false });
 </template>
 
 <style scoped>
-.replay { display: flex; flex-direction: column; gap: 8px; }
-.replay-head { display: flex; align-items: center; gap: 8px; }
+.replay { display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 0; padding: 10px; box-sizing: border-box; }
+.replay-head { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .replay-modes { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
 .rmode {
   padding: 4px 14px; font-size: 12px; font-weight: 600; color: var(--text-2);
@@ -653,7 +653,7 @@ watch(() => props.profile, () => { reset(); }, { deep: false });
 .rmode:hover { color: var(--text); background: var(--gray-100); }
 .rmode.on { color: #fff; background: var(--primary); }
 .replay-canvas {
-  width: 100%; height: 300px; border-radius: 8px; border: 1px solid var(--border);
+  width: 100%; flex: 1 1 auto; min-height: 200px; border-radius: 0; border: 1px solid var(--border);
   background: #0b1630; cursor: grab; touch-action: none;
 }
 .replay-bar { display: flex; align-items: center; gap: 8px; }

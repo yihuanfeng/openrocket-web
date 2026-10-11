@@ -293,6 +293,8 @@ export const zhCN = {
     tabAlt: '高度 · 速度',
     tabAcc: '加速度 · 马赫',
     tabReplay: '回放',
+    openReplay: '打开回放窗口',
+    replayHint: '实景/全景飞行回放 · 窗口可拖动、可缩放 · 尾焰、烟雾、开伞、3D 轨迹实时呈现',
     tabCompare: '多配置对比',
     motor: '发动机',
     delay: '延迟 {d}s',
