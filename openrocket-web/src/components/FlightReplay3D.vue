@@ -18,6 +18,7 @@ const vNow = ref(0);
 const mode = ref<'scenic' | 'panorama'>('scenic');
 
 let rotY = 0.55;
+let rotYUnset = true; // 实景追拍：首次/每次播放开始时与速度方位直接对齐，避免起飞固定倾斜
 let rotX = 0.35;
 let scale = 1;
 let raf = 0;
@@ -90,7 +91,9 @@ function orient(faces: Face[], dir: { x: number; y: number; z: number }): Face[]
   if (len < 1e-9) return faces.map((f) => ({ p: f.p.map((q) => ({ ...q })), fill: f.fill, light: f.light }));
   const dx = dir.x / len, dy = dir.y / len, dz = dir.z / len;
   const h = Math.hypot(dx, dy);
-  const sP = dz, cPv = h > 1e-9 ? h : 1;
+  // 俯仰角：dir 与 +Z 的夹角。sin=水平分量 h、cos=垂直分量 dz（此前 sP/cPv 写反，
+  // 导致垂直上升(dir=+Z)时火箭轴被转到 x-z 对角 45°，呈现"一起飞就斜着飞"）
+  const sP = h > 1e-9 ? h : 0, cPv = dz;
   const sY = h > 1e-9 ? dy / h : 0, cY = h > 1e-9 ? dx / h : 1;
   return faces.map((f) => ({
     p: f.p.map((q) => {
@@ -250,8 +253,9 @@ function drawScenic(ctx: CanvasRenderingContext2D, w: number, h: number): void {
   const deployed = tCur >= p.timeToApogee_s && zNow.value < p.maxAltitude_m * 0.99 && p.altitude[N - 1] < p.maxAltitude_m;
 
   // 相机：视角跟随速度水平方位（追拍）；俯视随高度渐变——起飞低空近平视（真实发射直播感），高空逐步俯视
+  // 起飞瞬间与速度方位直接对齐（初始 rotY 未跟随前不做缓动，避免火箭呈固定倾斜角），之后平滑跟随
   const yaw = Math.atan2(dvy, dvx);
-  rotY += (yaw - rotY) * 0.12;
+  if (rotYUnset) { rotY = yaw; rotYUnset = false; } else rotY += (yaw - rotY) * 0.12;
   const rY = rotY, rX = 0.06 + Math.min(1, zNow.value / 40) * 0.24;
   const cP = Math.cos(rX), sP = Math.sin(rX);
   // 以火箭为中心：世界点 - 火箭位置
@@ -375,7 +379,7 @@ function drawScenic(ctx: CanvasRenderingContext2D, w: number, h: number): void {
   ctx.fillStyle = '#e8f4ff';
   ctx.font = '600 14px -apple-system, sans-serif';
   ctx.textAlign = 'right';
-  ctx.fillText(`高度 ${zNow.value.toFixed(0)} m`, w - 22, 30);
+  ctx.fillText(`高度 ${zNow.value.toFixed(1)} m`, w - 22, 30);
   ctx.font = '12px -apple-system, sans-serif';
   ctx.fillStyle = '#b8d8f5';
   ctx.fillText(`速度 ${vNow.value.toFixed(1)} m/s`, w - 22, 50);
@@ -530,7 +534,7 @@ function drawPanorama(ctx: CanvasRenderingContext2D, w: number, h: number): void
     ctx.fillStyle = '#e2e8f0';
     ctx.font = '600 12px -apple-system, sans-serif';
     ctx.textAlign = 'right';
-    ctx.fillText(`t=${tCur.toFixed(3)}s  高度=${zNow.value.toFixed(0)}m  速度=${vNow.value.toFixed(1)}m/s  漂移=${hDist.toFixed(1)}m`, w - 12, 20);
+    ctx.fillText(`t=${tCur.toFixed(3)}s  高度=${zNow.value.toFixed(1)}m  速度=${vNow.value.toFixed(1)}m/s  漂移=${hDist.toFixed(1)}m`, w - 12, 20);
     const state = zNow.value <= 0 ? '地面' : deployed ? '伞降' : tCur < p.timeToApogee_s ? '上升' : '滑行';
     ctx.textAlign = 'left';
     ctx.fillStyle = deployed ? '#ff7a00' : '#38bdf8';
@@ -583,7 +587,10 @@ function togglePlay(): void {
   if (!props.profile || props.profile.time.length < 2) return;
   playing.value = !playing.value;
   lastTs = 0;
-  if (playing.value) raf = requestAnimationFrame(tick);
+  if (playing.value) {
+    rotYUnset = true; // 每次开始播放先与当前速度方位对齐，避免承接旧偏航导致起飞斜飞
+    raf = requestAnimationFrame(tick);
+  }
 }
 function reset(): void {
   playing.value = false;
